@@ -27,8 +27,15 @@ class TestRecommendationEngine:
         slots_text = json.dumps(clinical_slots) if clinical_slots else "{}"
         
         diseases_text = []
-        for d in predicted_diseases[:3]:
-            diseases_text.append(f"- {d.get('name', 'Unknown')} (Prob: {d.get('probability', 0):.2f})")
+        for d in predicted_diseases:
+            if d.get("concern_level") != "Must Rule Out":
+                diseases_text.append(f"- {d.get('name', 'Unknown')} (Concern: {d.get('concern_level', 'Unknown')})")
+        
+        # If all were 'Must Rule Out', still pass the top 3 so it has some context
+        if not diseases_text:
+            for d in predicted_diseases[:3]:
+                diseases_text.append(f"- {d.get('name', 'Unknown')} (Concern: {d.get('concern_level', 'Unknown')})")
+                
         diseases_str = "\n".join(diseases_text) if diseases_text else "None"
 
         reports_context = []

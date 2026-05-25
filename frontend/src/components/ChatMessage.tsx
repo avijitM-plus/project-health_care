@@ -58,8 +58,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
                                 <span className="meta-label" style={{color: '#0369a1'}}>Recommended Tests:</span>
                                 <ul className="tests-list">
                                     {metadata.recommended_tests.map((t, idx) => (
-                                        <li key={idx} className="test-item">
-                                            <span className="test-name">{t.test_name}</span>
+                                        <li key={idx} className={`test-item ${t.priority?.toLowerCase() === 'immediate' ? 'test-immediate' : 'test-secondary'}`}>
+                                            <div className="test-header">
+                                                <span className="test-name">{t.test_name}</span>
+                                                {t.priority && (
+                                                    <span className={`test-priority-badge priority-${t.priority.toLowerCase()}`}>
+                                                        {t.priority}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className="test-rationale">{t.rationale}</span>
                                         </li>
                                     ))}

@@ -16,7 +16,7 @@ export interface ChatResponse {
     clinical_slots: Record<string, any>;
     stage: number;
     suggested_replies: string[];
-    recommended_tests?: { test_name: string; rationale: string; }[];
+    recommended_tests?: { test_name: string; priority?: string; rationale: string; }[];
     reports?: any[];
 }
 
