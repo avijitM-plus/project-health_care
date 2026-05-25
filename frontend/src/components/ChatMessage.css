@@ -1,0 +1,145 @@
+.chat-message-wrapper {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    max-width: 800px;
+}
+
+.chat-message-wrapper.user-msg {
+    flex-direction: row-reverse;
+    margin-left: auto;
+}
+
+.chat-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ai-msg .chat-avatar {
+    background-color: var(--primary-light);
+    color: var(--primary);
+}
+
+.user-msg .chat-avatar {
+    background-color: var(--text-main);
+    color: var(--text-inverse);
+}
+
+.chat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 100%;
+}
+
+.user-msg .chat-content {
+    align-items: flex-end;
+}
+
+.chat-bubble {
+    padding: 12px 16px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.ai-msg .chat-bubble {
+    background-color: var(--bg-secondary);
+    color: var(--text-main);
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 2px;
+}
+
+.user-msg .chat-bubble {
+    background-color: var(--primary);
+    color: var(--text-inverse);
+    border-radius: var(--radius-lg) var(--radius-lg) 2px var(--radius-lg);
+}
+
+.chat-metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+    width: 100%;
+}
+
+.meta-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.metadata-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.diseases-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+
+.advice-box {
+    background-color: #f8fafc;
+    border-left: 4px solid var(--primary);
+    padding: 12px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 0.9rem;
+    color: var(--text-main);
+}
+
+.disclaimer {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    background-color: #f1f5f9;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-top: 8px;
+}
+
+.tests-box {
+    background-color: #f0f9ff;
+    border-left: 4px solid #0284c7;
+    padding: 12px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-top: 8px;
+}
+
+.tests-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.test-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.test-name {
+    font-weight: 600;
+    color: #0369a1;
+    font-size: 0.9rem;
+}
+
+.test-rationale {
+    font-size: 0.85rem;
+    color: var(--text-main);
+    margin-top: 2px;
+}

@@ -1,0 +1,501 @@
+fever,cough,chest_pain,headache,shortness_of_breath,sweating,fatigue,nausea,disease
+0,1,1,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,1,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,1,Dengue
+0,0,1,0,1,0,0,1,Heart Attack
+0,1,0,0,0,0,1,0,Common Cold
+1,0,0,1,0,1,1,0,Malaria
+1,0,0,1,0,1,1,1,Malaria
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,1,Dengue
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,0,Dengue
+0,1,0,0,1,0,0,0,Asthma
+1,1,0,0,1,0,1,0,Pneumonia
+0,0,1,0,1,0,0,0,Heart Attack
+1,0,0,1,0,1,1,1,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,0,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,0,1,0,Dengue
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,1,1,0,Malaria
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,0,Dengue
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,0,1,1,Dengue
+0,1,0,0,1,0,0,0,Asthma
+1,1,0,0,0,0,1,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,1,0,0,0,0,Common Cold
+1,1,1,0,1,0,0,0,Pneumonia
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,1,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,1,Dengue
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,1,0,1,0,1,0,Pneumonia
+0,0,1,0,1,0,0,0,Asthma
+1,1,1,0,1,0,1,0,Pneumonia
+1,1,0,0,1,0,1,0,Pneumonia
+0,1,0,1,0,0,1,0,Common Cold
+1,0,0,0,0,1,0,1,Malaria
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,1,1,1,Malaria
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,0,1,1,Dengue
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,1,0,1,0,0,0,Asthma
+1,1,1,0,1,0,0,0,Pneumonia
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,0,1,0,0,0,Asthma
+1,0,0,0,0,0,0,0,Common Cold
+0,0,0,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,1,Heart Attack
+1,1,1,0,0,0,1,0,Pneumonia
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,1,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,1,0,1,Malaria
+1,0,0,1,0,0,1,0,Dengue
+1,0,0,1,0,0,1,0,Dengue
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,0,0,1,1,1,Malaria
+0,1,0,0,0,0,1,0,Common Cold
+1,0,0,0,0,1,1,0,Malaria
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,1,0,0,0,1,Dengue
+1,0,0,1,0,0,1,0,Dengue
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,1,0,1,0,0,0,Asthma
+1,1,0,0,1,0,1,0,Pneumonia
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,1,0,1,0,0,1,Heart Attack
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,0,1,0,Dengue
+1,0,0,1,0,0,1,0,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,1,0,1,0,0,0,Pneumonia
+1,0,0,1,0,0,1,1,Dengue
+0,1,1,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,0,0,0,1,0,Dengue
+1,0,0,1,0,1,1,1,Malaria
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,1,0,1,0,0,0,Asthma
+1,0,1,0,0,0,0,0,Pneumonia
+1,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,1,1,0,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+1,1,1,0,1,0,1,0,Pneumonia
+1,0,0,1,0,0,1,0,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,0,Heart Attack
+1,1,1,0,0,0,0,0,Pneumonia
+1,1,1,0,1,0,0,0,Pneumonia
+0,1,0,0,0,0,1,0,Common Cold
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,1,Malaria
+0,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,0,1,1,Malaria
+1,1,1,0,0,0,0,0,Pneumonia
+1,0,0,1,0,0,1,1,Dengue
+0,0,1,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,0,Malaria
+1,1,0,1,0,0,1,0,Common Cold
+0,1,1,0,1,0,0,0,Asthma
+1,0,0,0,0,0,1,1,Dengue
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,0,0,1,0,1,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,0,0,0,0,0,Common Cold
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,1,0,0,1,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,1,Dengue
+1,1,1,0,0,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,1,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+1,1,0,0,0,0,0,0,Common Cold
+0,1,0,0,1,0,0,0,Asthma
+1,1,0,0,1,0,0,0,Pneumonia
+1,0,0,1,0,1,1,0,Malaria
+1,0,0,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,1,1,0,1,Heart Attack
+1,0,0,1,0,0,1,1,Dengue
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,0,1,Malaria
+0,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,1,Dengue
+1,1,0,0,1,0,1,0,Pneumonia
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,0,0,1,1,0,Malaria
+0,0,1,0,1,0,0,0,Heart Attack
+1,0,0,1,0,0,1,1,Malaria
+0,0,0,1,0,0,1,0,Tension Headache
+1,1,0,1,0,0,1,0,Common Cold
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,0,0,1,1,0,Malaria
+1,0,0,1,0,1,0,0,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,1,0,0,Malaria
+1,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,0,1,0,Dengue
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,1,0,1,1,0,1,Heart Attack
+1,1,0,0,1,0,1,0,Pneumonia
+1,1,0,0,1,0,1,0,Pneumonia
+0,1,0,0,1,0,1,0,Pneumonia
+1,0,0,1,0,1,1,1,Malaria
+1,1,1,0,0,0,1,0,Pneumonia
+1,0,0,1,0,0,1,0,Dengue
+0,1,0,0,1,0,0,0,Asthma
+0,1,1,0,1,0,0,0,Asthma
+0,1,0,0,0,0,0,0,Common Cold
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,1,0,1,0,1,0,Pneumonia
+1,1,1,0,0,0,1,0,Pneumonia
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,0,0,1,Dengue
+1,0,0,1,0,1,1,1,Malaria
+0,0,1,0,1,0,0,0,Asthma
+1,1,0,1,0,0,1,0,Common Cold
+1,0,0,0,0,1,1,0,Malaria
+0,1,1,0,1,0,0,0,Asthma
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,1,0,0,1,0,1,Heart Attack
+0,1,0,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,1,Heart Attack
+1,0,0,1,0,1,0,1,Malaria
+0,1,1,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,1,Malaria
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,1,0,0,1,0,1,Heart Attack
+1,0,0,0,0,0,0,0,Common Cold
+0,1,0,0,1,0,0,0,Asthma
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,1,0,1,0,0,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,0,1,0,0,0,0,Common Cold
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,0,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,0,1,0,0,0,Asthma
+1,1,1,0,1,0,0,0,Pneumonia
+1,0,0,1,0,1,0,0,Malaria
+1,0,0,1,0,1,0,1,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,1,Malaria
+1,0,0,0,0,1,0,1,Malaria
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,1,0,0,1,0,0,Heart Attack
+1,1,0,0,1,0,0,0,Pneumonia
+0,1,1,0,1,0,0,0,Asthma
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,0,0,0,0,0,0,Common Cold
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,1,Malaria
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,1,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,1,0,Tension Headache
+1,1,0,0,0,0,1,0,Common Cold
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,1,0,0,Malaria
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,0,0,0,0,Heart Attack
+0,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,0,0,0,1,0,Dengue
+1,0,0,1,0,1,0,1,Malaria
+0,0,1,0,1,0,0,0,Heart Attack
+0,1,0,0,0,0,1,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,1,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,0,Dengue
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,0,0,1,0,1,0,Pneumonia
+0,1,0,1,0,0,1,0,Common Cold
+1,0,0,1,0,0,0,0,Common Cold
+0,1,0,0,0,0,1,0,Common Cold
+0,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,0,0,0,0,0,0,Common Cold
+1,0,0,1,0,1,1,0,Malaria
+1,0,0,1,0,0,1,1,Malaria
+0,1,1,0,1,0,0,0,Asthma
+0,1,1,0,1,0,0,0,Asthma
+1,1,0,0,0,0,1,0,Common Cold
+0,0,1,0,1,0,0,0,Asthma
+1,1,0,1,0,0,1,0,Common Cold
+1,0,0,1,0,0,1,1,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,0,1,0,0,0,Asthma
+0,0,1,0,1,0,0,0,Heart Attack
+0,1,0,1,0,0,1,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,0,1,0,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,0,1,0,0,0,0,Common Cold
+1,1,0,0,0,0,1,0,Pneumonia
+0,1,0,1,0,0,0,0,Common Cold
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,1,0,0,0,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,0,1,0,1,0,Pneumonia
+1,1,1,0,1,0,1,0,Pneumonia
+0,1,0,1,0,0,0,0,Common Cold
+1,1,1,0,0,0,1,0,Pneumonia
+0,0,0,1,0,0,1,0,Tension Headache
+1,1,0,0,0,0,1,0,Common Cold
+1,0,0,1,0,0,1,0,Dengue
+1,1,1,0,0,0,0,0,Pneumonia
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,0,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,1,0,Dengue
+1,1,0,0,0,0,0,0,Common Cold
+1,0,0,1,0,0,1,0,Dengue
+1,1,1,0,0,0,1,0,Pneumonia
+0,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+1,1,0,1,0,0,0,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,0,1,1,Dengue
+0,1,0,0,1,0,0,0,Asthma
+1,1,0,0,1,0,0,0,Pneumonia
+0,1,0,0,0,0,1,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,0,1,0,0,0,Asthma
+0,1,0,0,1,0,0,0,Asthma
+0,1,1,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,0,1,0,Dengue
+1,0,0,1,0,0,1,1,Dengue
+1,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,1,Heart Attack
+0,1,0,1,0,0,0,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,1,0,0,1,1,Dengue
+0,0,1,0,1,1,0,1,Heart Attack
+1,1,1,0,1,0,1,0,Pneumonia
+0,1,0,0,0,0,1,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,1,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,1,1,0,1,Heart Attack
+0,1,0,0,0,0,1,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,0,0,0,1,0,Pneumonia
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,0,1,0,Dengue
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,0,1,1,Dengue
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,0,0,0,1,0,Common Cold
+1,1,0,1,0,0,1,0,Common Cold
+0,0,1,0,1,1,0,1,Heart Attack
+1,0,0,0,0,1,1,1,Malaria
+0,1,0,0,1,0,0,0,Asthma
+0,0,0,0,1,0,0,0,Asthma
+1,0,0,0,0,0,1,0,Pneumonia
+0,1,0,1,0,0,0,0,Common Cold
+0,1,0,0,0,0,1,0,Common Cold
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,1,0,0,0,0,0,Pneumonia
+0,0,0,0,1,0,0,0,Asthma
+1,0,0,0,0,0,1,0,Common Cold
+0,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,1,1,0,Malaria
+1,1,0,0,0,0,1,0,Common Cold
+0,1,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,0,0,Malaria
+0,0,1,0,1,0,0,0,Asthma
+1,1,0,0,1,0,1,0,Pneumonia
+0,0,1,0,1,0,0,0,Heart Attack
+1,1,0,0,1,0,1,0,Pneumonia
+0,1,0,0,1,0,0,0,Asthma
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,1,0,0,0,0,Dengue
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,0,0,1,1,0,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,0,1,0,0,1,0,Common Cold
+1,0,0,1,0,0,0,0,Malaria
+1,0,0,1,0,1,1,0,Malaria
+1,0,0,1,0,0,1,0,Dengue
+1,0,0,1,0,0,1,0,Malaria
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,0,1,Dengue
+0,0,1,0,0,1,0,1,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,0,0,0,Asthma
+1,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,0,0,0,0,1,0,Common Cold
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,1,0,1,0,1,0,Pneumonia
+1,1,1,0,1,0,1,0,Pneumonia
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,1,1,1,Malaria
+1,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,0,1,0,Malaria
+0,1,0,0,1,0,0,0,Asthma
+1,1,0,1,0,0,0,0,Common Cold
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,1,1,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,0,1,0,1,Heart Attack
+0,1,0,1,0,0,1,0,Common Cold
+0,1,0,0,0,0,0,0,Common Cold
+0,1,0,1,0,0,0,0,Common Cold
+0,1,1,0,1,0,0,0,Asthma
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,0,0,1,Dengue
+0,0,1,0,1,1,0,0,Heart Attack
+1,1,1,0,1,0,1,0,Pneumonia
+1,1,1,0,1,0,1,0,Pneumonia
+0,0,1,0,0,1,0,1,Heart Attack
+0,1,1,0,1,0,0,0,Asthma
+1,0,0,1,0,0,1,0,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+1,1,0,0,1,0,1,0,Pneumonia
+1,0,0,1,0,0,1,0,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,1,1,1,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,0,Heart Attack
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,0,1,0,1,0,Pneumonia
+0,0,1,0,1,1,0,1,Heart Attack
+0,1,0,1,0,0,1,0,Common Cold
+1,0,0,1,0,0,1,0,Dengue
+1,1,0,0,1,0,1,0,Pneumonia
+0,0,0,0,1,0,0,0,Asthma
+1,0,0,1,0,1,0,1,Malaria
+0,0,1,0,1,0,0,1,Heart Attack
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,0,1,1,Dengue
+0,1,1,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,0,0,0,0,0,0,Common Cold
+0,1,0,1,0,0,1,0,Common Cold
+1,0,0,1,0,1,0,1,Malaria
+0,0,1,0,1,1,0,0,Heart Attack
+0,1,0,1,0,0,0,0,Common Cold
+1,0,0,1,0,1,1,0,Malaria
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,0,1,0,Dengue
+0,1,0,0,1,0,0,0,Asthma
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,1,0,Tension Headache
+0,0,1,0,1,0,0,0,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,1,0,1,0,0,0,Asthma
+0,1,0,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,1,Heart Attack
+1,1,1,0,1,0,1,0,Pneumonia
+1,0,0,1,0,0,0,1,Dengue
+1,1,0,0,0,0,0,0,Common Cold
+1,1,1,0,1,0,1,0,Pneumonia
+1,0,0,1,0,1,1,0,Malaria
+0,1,1,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,1,Heart Attack
+1,0,0,0,0,1,1,1,Malaria
+0,1,1,0,1,0,0,0,Asthma
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,1,0,1,1,0,1,Heart Attack
+1,0,0,1,0,0,0,0,Common Cold
+0,0,1,0,1,0,0,1,Heart Attack
+1,0,0,1,0,1,1,1,Malaria
+1,0,0,0,0,1,0,1,Malaria
+1,0,0,1,0,1,1,0,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,1,0,1,0,0,0,Asthma
+0,1,1,0,1,0,0,0,Asthma
+0,1,0,0,0,0,1,0,Common Cold
+1,0,0,1,0,1,1,0,Malaria
+0,0,0,1,0,0,0,0,Tension Headache
+0,0,0,1,0,0,1,0,Tension Headache
+1,0,0,0,0,1,1,0,Malaria
+0,1,0,1,0,0,0,0,Common Cold
+0,0,1,0,0,0,0,0,Heart Attack
+1,0,0,0,0,0,1,1,Dengue
+0,0,0,1,0,0,0,0,Tension Headache
+0,1,0,0,0,0,0,0,Common Cold
+1,0,0,1,0,1,1,1,Malaria
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache
+1,0,0,1,0,1,1,1,Malaria
+1,1,1,0,1,0,1,0,Pneumonia
+1,1,0,0,0,0,0,0,Common Cold
+0,0,0,1,0,0,0,0,Common Cold
+0,0,1,0,1,1,0,1,Heart Attack
+1,0,0,1,0,0,1,0,Malaria
+1,0,0,1,0,0,1,1,Dengue
+1,0,0,1,0,0,0,0,Malaria
+1,1,1,0,1,0,1,0,Pneumonia
+0,1,0,0,1,0,0,0,Asthma
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,1,1,0,1,Heart Attack
+0,0,1,0,0,1,0,0,Heart Attack
+0,0,1,0,1,0,0,0,Heart Attack
+0,0,1,0,0,1,0,1,Heart Attack
+0,0,0,1,0,0,0,0,Tension Headache

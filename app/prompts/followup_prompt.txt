@@ -1,0 +1,7 @@
+Based on the patient's current symptoms and predicted conditions, generate intelligent follow-up questions.
+
+CURRENT SYMPTOMS: {symptoms}
+PREDICTED CONDITIONS: {conditions}
+
+Generate 2-3 focused medical follow-up questions that would help narrow down the diagnosis.
+Return as a JSON array of strings.
