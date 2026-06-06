@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, ReportAnalysisResponse } from '../types/api';
+import type { ChatRequest, ChatResponse, ReportAnalysisResponse, XRayAnalysisResponse } from '../types/api';
 
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
@@ -46,6 +46,25 @@ export const apiService = {
 
         if (!response.ok) {
             throw new Error(`Report analysis failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async analyzeXray(file: File, conversationId?: string): Promise<XRayAnalysisResponse> {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (conversationId) {
+            formData.append('conversation_id', conversationId);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/analyze-xray`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`X-ray analysis failed: ${response.statusText}`);
         }
 
         return response.json();

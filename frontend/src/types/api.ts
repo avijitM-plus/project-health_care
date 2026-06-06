@@ -28,6 +28,27 @@ export interface ChatRequest {
     chronic_conditions?: string | null;
 }
 
+export interface ImagingFindings {
+    study_id: string;
+    modality: string;
+    findings: string[];
+    abnormalities: string[];
+    impression: string;
+    confidence: number;
+    urgency_hint: string;
+    filename: string;
+    uploaded_at: number;
+}
+
+export interface XRayAnalysisResponse {
+    imaging: ImagingFindings;
+    clinical_response: string;
+    followup_questions: string[];
+    urgency: string;
+    updated_slots: Record<string, any>;
+    disclaimer: string;
+}
+
 export interface ReportAnalysisResponse {
     filename: string;
     extracted_text: string;

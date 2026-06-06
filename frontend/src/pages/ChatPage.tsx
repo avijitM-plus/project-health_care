@@ -2,15 +2,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 import { ChatMessage } from '../components/ChatMessage';
-import { Send, FileText, RefreshCw, Paperclip } from 'lucide-react';
+import { Send, FileText, RefreshCw, Paperclip, ScanLine } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
-    const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping } = useChat();
+    const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy } = useChat();
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const xrayInputRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
 
     const scrollToBottom = () => {
@@ -61,6 +62,41 @@ export const ChatPage: React.FC = () => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
+        }
+    };
+
+    const handleXRayUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsTyping(true);
+        addMessage({
+            sender: 'ai',
+            text: `Analyzing chest X-ray: ${file.name}...`
+        });
+
+        try {
+            const response = await apiService.analyzeXray(file, conversationId);
+
+            // Store imaging study in context for sidebar display
+            addImagingStudy(response.imaging);
+
+            // Add the auto-generated clinical response as an AI message
+            addMessage({
+                sender: 'ai',
+                text: response.clinical_response,
+            });
+        } catch (error) {
+            console.error('X-ray upload error:', error);
+            addMessage({
+                sender: 'ai',
+                text: 'There was an error analyzing the chest X-ray. Please ensure the image is a valid JPG or PNG file and try again.'
+            });
+        } finally {
+            setIsTyping(false);
+            if (xrayInputRef.current) {
+                xrayInputRef.current.value = '';
+            }
         }
     };
 
@@ -148,20 +184,35 @@ export const ChatPage: React.FC = () => {
 
             <footer className="chat-input-area">
                 <div className="input-glass-panel">
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        style={{ display: 'none' }} 
-                        accept=".pdf,.png,.jpg,.jpeg" 
-                        onChange={handleFileUpload} 
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
+                        accept=".pdf,.png,.jpg,.jpeg"
+                        onChange={handleFileUpload}
                     />
-                    <button 
+                    <input
+                        type="file"
+                        ref={xrayInputRef}
+                        style={{ display: 'none' }}
+                        accept=".jpg,.jpeg,.png"
+                        onChange={handleXRayUpload}
+                    />
+                    <button
                         className="upload-inline-button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isTyping}
-                        title="Upload Medical Report"
+                        title="Upload Medical Report (PDF or image)"
                     >
                         <Paperclip size={20} />
+                    </button>
+                    <button
+                        className="upload-inline-button xray-upload-button"
+                        onClick={() => xrayInputRef.current?.click()}
+                        disabled={isTyping}
+                        title="Upload Chest X-Ray (JPG/PNG) — analyzed by MedGemma AI"
+                    >
+                        <ScanLine size={20} />
                     </button>
                     <textarea
                         value={inputValue}

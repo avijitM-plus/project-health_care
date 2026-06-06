@@ -1,11 +1,11 @@
 import React from 'react';
 import { useChat } from '../context/ChatContext';
 import { UrgencyBadge } from './UrgencyBadge';
-import { Activity, AlertCircle, List, Stethoscope, FileText } from 'lucide-react';
+import { Activity, AlertCircle, List, Stethoscope, FileText, ScanLine } from 'lucide-react';
 import './Sidebar.css';
 
 export const Sidebar: React.FC = () => {
-    const { accumulatedSymptoms, peakUrgency, latestDiseases, clinicalSlots, stage, uploadedReports } = useChat();
+    const { accumulatedSymptoms, peakUrgency, latestDiseases, clinicalSlots, stage, uploadedReports, imagingStudies } = useChat();
     
     const stageNames = ["Chief Complaint", "Characterization", "Red Flags", "Differential Refinement", "Disposition"];
     const currentStageName = stageNames[Math.min(stage - 1, 4)] || "Consultation";
@@ -88,8 +88,45 @@ export const Sidebar: React.FC = () => {
                         <p className="empty-state">No reports uploaded.</p>
                     )}
                 </section>
+                <section className="sidebar-section">
+                    <h2 className="section-title">
+                        <ScanLine size={16} /> Imaging Studies
+                    </h2>
+                    {imagingStudies && imagingStudies.length > 0 ? (
+                        <div className="imaging-timeline animate-slide-up">
+                            {imagingStudies.map((study) => (
+                                <div
+                                    key={study.study_id}
+                                    className={`xray-mini ${study.abnormalities.length > 0 ? 'xray-abnormal' : ''}`}
+                                >
+                                    <div className="xray-header">
+                                        <span className="xray-filename" title={study.filename}>
+                                            {study.filename.length > 22
+                                                ? study.filename.slice(0, 20) + '…'
+                                                : study.filename}
+                                        </span>
+                                        <span className="xray-modality-badge">X-Ray</span>
+                                    </div>
+                                    {study.abnormalities.length > 0 ? (
+                                        <span className="xray-badge-abnormal">
+                                            ⚠ {study.abnormalities.length} finding{study.abnormalities.length > 1 ? 's' : ''}
+                                        </span>
+                                    ) : (
+                                        <span className="xray-badge-normal">✓ No abnormalities</span>
+                                    )}
+                                    <p className="xray-impression">{study.impression}</p>
+                                    <span className="xray-confidence">
+                                        Confidence: {Math.round(study.confidence * 100)}%
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="empty-state">No imaging studies uploaded.</p>
+                    )}
+                </section>
             </div>
-            
+
             <div className="sidebar-footer">
                 <p>Medical Triage AI v2.0</p>
             </div>

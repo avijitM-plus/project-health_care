@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { ChatResponse, DiseasePrediction } from '../types/api';
+import type { ChatResponse, DiseasePrediction, ImagingFindings } from '../types/api';
 
 export interface Message {
     id: string;
@@ -24,6 +24,8 @@ interface ChatContextProps {
     clinicalSlots: Record<string, any>;
     stage: number;
     uploadedReports: any[];
+    imagingStudies: ImagingFindings[];
+    addImagingStudy: (study: ImagingFindings) => void;
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
@@ -32,6 +34,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [messages, setMessages] = useState<Message[]>([]);
     const [conversationId, setConversationId] = useState<string>(uuidv4());
     const [isTyping, setIsTyping] = useState<boolean>(false);
+    const [imagingStudies, setImagingStudies] = useState<ImagingFindings[]>([]);
     
     // Derived state from latest AI response
     const accumulatedSymptoms = messages
@@ -65,9 +68,14 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ]);
     };
 
+    const addImagingStudy = (study: ImagingFindings) => {
+        setImagingStudies(prev => [...prev, study]);
+    };
+
     const resetConversation = () => {
         setMessages([]);
         setConversationId(uuidv4());
+        setImagingStudies([]);
     };
 
     return (
@@ -84,7 +92,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 peakUrgency,
                 clinicalSlots,
                 stage,
-                uploadedReports
+                uploadedReports,
+                imagingStudies,
+                addImagingStudy,
             }}
         >
             {children}

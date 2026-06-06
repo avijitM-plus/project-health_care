@@ -1,6 +1,24 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
 import time
+import uuid
+
+
+# ---------------------------------------------------------------------------
+# Imaging findings — structured output from MedGemma chest X-ray analysis
+# ---------------------------------------------------------------------------
+
+class ImagingFindings(BaseModel):
+    """Structured findings from MedGemma medical imaging analysis."""
+    study_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    modality: str = "chest_xray"
+    findings: List[str] = []
+    abnormalities: List[str] = []
+    impression: str = ""
+    confidence: float = 0.0
+    urgency_hint: str = "NONE"
+    filename: str = ""
+    uploaded_at: float = Field(default_factory=time.time)
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +72,7 @@ class ConversationState(BaseModel):
     answered_questions: list[str] = [] # V3 - Questions resolved by the user
     reports: list[ReportData] = []
     trend_summary: str = ""            # Longitudinal trend analysis across reports
+    imaging_studies: list[ImagingFindings] = []
     stage: int = 1                     # V4 - Conversational stage (1 to 5)
     turn_count: int = 0
     created_at: float = Field(default_factory=time.time)
@@ -109,3 +128,18 @@ class ChatResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class XRayAnalysisResponse(BaseModel):
+    """Response returned by POST /analyze-xray."""
+    # MedGemma imaging findings
+    imaging: ImagingFindings
+    # Groq/Qwen auto-generated clinical response
+    clinical_response: str
+    followup_questions: List[str] = []
+    urgency: str = "NONE"
+    updated_slots: dict = {}
+    disclaimer: str = (
+        "This is AI-generated guidance and not a medical diagnosis. "
+        "Consult a licensed doctor for professional medical advice."
+    )

@@ -31,7 +31,13 @@ from dotenv import load_dotenv
 
 from groq import Groq, RateLimitError, APITimeoutError, APIError
 from app.services.prompt_service import prompt_service
-from app.services.system_prompts import CHAT_SYSTEM_PROMPT, REPORT_SYSTEM_PROMPT, STATE_EXTRACTION_PROMPT
+from app.services.system_prompts import (
+    CHAT_SYSTEM_PROMPT,
+    REPORT_SYSTEM_PROMPT,
+    STATE_EXTRACTION_PROMPT,
+    IMAGING_RESPONSE_SYSTEM_PROMPT,
+)
+from app.models.schemas import ImagingFindings
 
 load_dotenv(override=True)
 
@@ -164,6 +170,64 @@ class LLMService:
                 "advice": "Please consult a doctor to review this report.",
                 "disclaimer": (
                     "This is AI-generated guidance and not a medical diagnosis. "
+                    "Consult a licensed doctor for professional medical advice."
+                ),
+            },
+        )
+
+    def generate_xray_response(
+        self,
+        imaging: ImagingFindings,
+        memory_summary: str = "",
+    ) -> dict:
+        """Generate an imaging-aware clinical response via Groq after X-ray analysis."""
+        findings_text = "\n".join(f"  - {f}" for f in imaging.findings) or "  - No specific findings noted"
+        abnormalities_text = (
+            "\n".join(f"  - {a}" for a in imaging.abnormalities)
+            if imaging.abnormalities
+            else "  - None detected"
+        )
+
+        user_prompt = (
+            f"IMAGING EVENT: Chest X-ray uploaded and analyzed by MedGemma AI.\n\n"
+            f"MEDGEMMA ANALYSIS RESULTS:\n"
+            f"  Filename: {imaging.filename}\n"
+            f"  Modality: Chest X-Ray\n"
+            f"  Findings:\n{findings_text}\n"
+            f"  Abnormalities detected:\n{abnormalities_text}\n"
+            f"  Clinical impression: {imaging.impression}\n"
+            f"  Analysis confidence: {imaging.confidence:.0%}\n"
+            f"  Suggested urgency: {imaging.urgency_hint}\n\n"
+            f"CURRENT CLINICAL CONTEXT:\n{memory_summary}\n\n"
+            "Generate a clinical conversational response that acknowledges the X-ray, explains "
+            "the key findings in lay terms, and asks 1-2 targeted follow-up questions directly "
+            "relevant to the imaging findings. Follow the standard JSON output contract."
+        )
+
+        return self._call_groq(
+            system_prompt=IMAGING_RESPONSE_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            max_tokens=1536,
+            temperature=0.3,
+            fallback={
+                "reply": (
+                    f"I've reviewed the chest X-ray you uploaded ({imaging.filename}). "
+                    f"{imaging.impression} "
+                    "Please note this analysis requires review by a qualified radiologist. "
+                    "Are you currently experiencing any breathing difficulty or chest discomfort?"
+                ),
+                "possible_diseases": [],
+                "urgency": imaging.urgency_hint if imaging.urgency_hint != "NONE" else "LOW",
+                "followup_questions": [
+                    "Are you currently experiencing any difficulty breathing or shortness of breath?",
+                    "Do you have a fever or productive cough?",
+                ],
+                "suggested_replies": ["Yes, I have those symptoms", "No, I feel okay", "I'm not sure"],
+                "stage": 3,
+                "advice": "Please consult a doctor and share this X-ray with a radiologist for formal interpretation.",
+                "disclaimer": (
+                    "This is AI-generated guidance and not a medical diagnosis. "
+                    "Imaging analysis requires radiologist interpretation. "
                     "Consult a licensed doctor for professional medical advice."
                 ),
             },

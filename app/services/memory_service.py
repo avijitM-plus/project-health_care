@@ -13,7 +13,7 @@ import time
 import json
 from typing import Any
 
-from app.models.schemas import ConversationState, SessionMetadata, SymptomRecord, ReportData
+from app.models.schemas import ConversationState, SessionMetadata, SymptomRecord, ReportData, ImagingFindings
 
 logger = logging.getLogger(__name__)
 
@@ -337,11 +337,26 @@ class MemoryService:
             if state.trend_summary:
                 parts.append("LONGITUDINAL TREND SUMMARY:\n" + state.trend_summary)
 
+        # --- Imaging Studies (MedGemma chest X-ray findings) ---
+        if state.imaging_studies:
+            imaging_lines = []
+            for study in state.imaging_studies:
+                abnormal_tag = f" [ABNORMAL: {', '.join(study.abnormalities)}]" if study.abnormalities else " [No abnormalities detected]"
+                imaging_lines.append(
+                    f"- {study.filename} | Chest X-Ray | Confidence: {study.confidence:.0%}{abnormal_tag}\n"
+                    f"  Findings: {'; '.join(study.findings)}\n"
+                    f"  Impression: {study.impression}\n"
+                    f"  Urgency hint: {study.urgency_hint}"
+                )
+            parts.append(
+                "IMAGING STUDIES (MedGemma Analysis):\n" + "\n".join(imaging_lines)
+            )
+
         # --- V3 Conversational State ---
         pending = self.get_pending_questions(session_id)
         if pending:
             parts.append("PENDING UNANSWERED QUESTIONS:\n" + "\n".join([f"  - {q}" for q in pending]))
-        
+
         if state.answered_questions:
             parts.append("ALREADY RESOLVED/ANSWERED TOPICS:\n" + "\n".join([f"  - {q}" for q in state.answered_questions[-5:]]))
 
@@ -358,11 +373,24 @@ class MemoryService:
         """Append a structured ReportData object."""
         state = self.load(session_id)
         state.reports.append(report_data)
-        
+
     def update_trend_summary(self, session_id: str, trend_summary: str) -> None:
         """Update the longitudinal trend summary for this session."""
         state = self.load(session_id)
         state.trend_summary = trend_summary
+
+    def add_imaging_study(self, session_id: str, findings: ImagingFindings) -> None:
+        """Persist imaging findings into the session's imaging history."""
+        state = self.load(session_id)
+        state.imaging_studies.append(findings)
+        logger.info(
+            f"Memory: imaging study added [{session_id}] "
+            f"file={findings.filename}, abnormalities={len(findings.abnormalities)}"
+        )
+
+    def get_imaging_studies(self, session_id: str) -> list[ImagingFindings]:
+        """Return all imaging studies for this session."""
+        return self.load(session_id).imaging_studies
 
     # ------------------------------------------------------------------
     # Internal helpers
