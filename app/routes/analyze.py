@@ -5,6 +5,7 @@ from app.services.ocr_service import ocr_service
 from app.services.llm_service import llm_service
 from app.services.memory_service import memory_service
 from app.services.trend_engine import trend_engine
+from app.services.clinical_slot_resolver import clinical_slot_resolver
 from app.models.schemas import ReportData, SymptomRecord
 from typing import Optional
 import os
@@ -79,9 +80,12 @@ async def analyze_report(
         )
         memory_service.add_report(conversation_id, report_data)
         
-        # Merge the extracted symptoms and clinical slots into the active conversation state
+        # Merge the extracted symptoms and clinical slots into the active conversation state.
+        # Also translate report LLM keys → NBQ slot names so followup_engine sees them.
         if report_data.clinical_slots:
-            memory_service.update_slots(conversation_id, report_data.clinical_slots)
+            nbq_slots = clinical_slot_resolver.map_report_slots(report_data.clinical_slots)
+            merged_report_slots = {**report_data.clinical_slots, **nbq_slots}
+            memory_service.update_slots(conversation_id, merged_report_slots)
             
         if report_data.extracted_symptoms:
             # We assume turn 0 or rely on existing session turn count

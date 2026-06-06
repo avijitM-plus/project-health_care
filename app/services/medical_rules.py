@@ -72,6 +72,61 @@ NBQ_GRAPH = {
     ],
 }
 
+# Kaggle symptom name → NBQ_GRAPH key mapping.
+# The Kaggle dataset uses different canonical names than our NBQ_GRAPH keys.
+# This map allows followup_engine to bridge them.
+KAGGLE_TO_NBQ: dict[str, str] = {
+    # Respiratory
+    "breathlessness": "shortness_of_breath",
+    "shortness_of_breath": "shortness_of_breath",
+    "difficulty_in_breathing": "shortness_of_breath",
+    "fast_heart_rate": "shortness_of_breath",
+    # Pain
+    "stomach_pain": "abdominal_pain",
+    "abdominal_pain": "abdominal_pain",
+    "belly_pain": "abdominal_pain",
+    # Bowel
+    "diarrhoea": "diarrhea",
+    "diarrhea": "diarrhea",
+    # Skin
+    "skin_rash": "skin_rash",
+    "rash": "skin_rash",
+    "itching": "skin_rash",
+    # Mental health
+    "depression": "depression",
+    "mood_swings": "depression",
+    "anxiety": "depression",
+    # Swelling
+    "swelling_of_stomach": "swelling",
+    "swollen_legs": "swelling",
+    "swelling_joints": "swelling",
+    "knee_pain": "swelling",
+    # Cough
+    "cough": "cough",
+    "mucoid_sputum": "cough",
+    "rusty_sputum": "cough",
+    "blood_in_sputum": "cough",
+    # Fever
+    "fever": "fever",
+    "high_fever": "fever",
+    "mild_fever": "fever",
+    "chills": "fever",
+    # Headache
+    "headache": "headache",
+    "continuous_sneezing": "headache",
+    # Chest pain
+    "chest_pain": "chest_pain",
+    # Dizziness
+    "dizziness": "dizziness",
+    "loss_of_balance": "dizziness",
+    # Vomiting
+    "vomiting": "vomiting",
+    "nausea": "vomiting",
+    # Weight loss
+    "weight_loss": "weight_loss",
+    "loss_of_appetite": "weight_loss",
+}
+
 # Groups of symptoms that together indicate an emergency
 # TASK 6 — Expanded emergency trigger rules
 EMERGENCY_TRIGGERS = [

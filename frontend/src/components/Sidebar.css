@@ -167,6 +167,110 @@
     font-style: italic;
 }
 
+/* ── Patient profile form ───────────────────────────────────────────── */
+
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.profile-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    width: 44px;
+    flex-shrink: 0;
+}
+
+.profile-input,
+.profile-select {
+    flex: 1;
+    font-size: 0.82rem;
+    padding: 5px 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-main);
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.profile-input:focus,
+.profile-select:focus {
+    border-color: var(--primary);
+}
+
+.profile-hint {
+    font-size: 0.72rem;
+    color: var(--primary);
+    font-style: italic;
+    margin-top: 4px;
+}
+
+/* ── Stage progress bar ─────────────────────────────────────────────── */
+
+.status-stage {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.stage-bar {
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 99px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+
+.stage-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 99px;
+    transition: width 0.4s ease;
+}
+
+/* ── Section count badge ────────────────────────────────────────────── */
+
+.count-badge {
+    margin-left: auto;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.03em;
+}
+
+/* ── Symptom chips ──────────────────────────────────────────────────── */
+
+.symptoms-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.symptom-chip {
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-radius: 99px;
+    padding: 3px 10px;
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
 .sidebar-footer {
     padding: 16px 24px;
     border-top: 1px solid #e2e8f0;

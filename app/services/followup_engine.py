@@ -1,5 +1,5 @@
 import logging
-from app.services.medical_rules import NBQ_GRAPH
+from app.services.medical_rules import NBQ_GRAPH, KAGGLE_TO_NBQ
 
 logger = logging.getLogger(__name__)
 
@@ -12,19 +12,28 @@ class FollowupEngine:
         self, symptoms: list[str], predicted_diseases: list[dict],
         clinical_slots: dict = None, answered_questions: list[str] = None, asked_questions: list[str] = None
     ) -> list[str]:
+        from app.services.clinical_slot_resolver import clinical_slot_resolver
         clinical_slots = clinical_slots or {}
         answered_questions = answered_questions or []
         asked_questions = asked_questions or []
-        
-        candidates = []
+
+        # Map Kaggle symptom names → NBQ graph keys; deduplicate
+        seen_nbq_keys: set[str] = set()
+        nbq_symptoms: list[str] = []
         for sym in symptoms:
+            nbq_key = KAGGLE_TO_NBQ.get(sym, sym)
+            if nbq_key in NBQ_GRAPH and nbq_key not in seen_nbq_keys:
+                nbq_symptoms.append(nbq_key)
+                seen_nbq_keys.add(nbq_key)
+
+        candidates = []
+        for sym in nbq_symptoms:
             if sym in NBQ_GRAPH:
                 for node in NBQ_GRAPH[sym]:
                     slot_name = node["slot"]
-                    
-                    # 1. Skip if slot is already resolved with a meaningful value
-                    val = clinical_slots.get(slot_name)
-                    if val is not None and val != "" and val != "UNKNOWN":
+
+                    # 1. Skip if slot is already resolved — uses alias-aware check
+                    if clinical_slot_resolver.is_slot_filled(slot_name, clinical_slots):
                         continue
                         
                     # 2. Skip if the question was explicitly answered according to the LLM tracker

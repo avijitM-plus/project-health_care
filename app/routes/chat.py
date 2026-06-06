@@ -10,6 +10,7 @@ from app.services.memory_service import memory_service
 from app.services.advice_engine import advice_engine
 from app.services.test_engine import test_engine
 from app.services.followup_engine import followup_engine
+from app.services.clinical_slot_resolver import clinical_slot_resolver
 import concurrent.futures
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,19 @@ async def chat_endpoint(request: ChatRequest):
     extraction = state_extractor.extract_state(user_msg, current_slots, pending_qs)
     
     # ------------------------------------------------------------------
+    # 3b. Deterministic slot pre-resolution from patient text
+    # ------------------------------------------------------------------
+    # Run regex patterns against raw text BEFORE LLM — fills slots the
+    # LLM might key differently (e.g. "nothing comes out" → cough_type=dry).
+    deterministic_slots = clinical_slot_resolver.resolve_from_text(user_msg, current_slots)
+
+    # ------------------------------------------------------------------
     # 4. Merge state and symptoms
     # ------------------------------------------------------------------
-    memory_service.update_slots(session_id, extraction.mutated_slots)
+    # Normalize LLM slot key variations → canonical NBQ slot names
+    normalized_llm_slots = clinical_slot_resolver.normalize_slot_names(extraction.mutated_slots)
+    merged_slots = {**deterministic_slots, **normalized_llm_slots}
+    memory_service.update_slots(session_id, merged_slots)
     
     # Create SymptomRecords for the base symptoms to maintain compatibility with predictor
     new_records = [SymptomRecord(name=sym, base_name=sym) for sym in extraction.normalized_symptoms]
@@ -192,14 +203,38 @@ async def chat_endpoint(request: ChatRequest):
     # ------------------------------------------------------------------
     llm_resolved = llm_output.get("resolved_questions", [])
     all_resolved = list(set(llm_resolved + extraction.resolved_questions))
-    
+
+    # Mark deterministically resolved slots as answered too — any question
+    # whose slot was just filled by pattern-matching is now resolved.
+    if deterministic_slots:
+        det_resolved = clinical_slot_resolver.get_resolved_slots(
+            base_symptom_names, state.clinical_slots
+        )
+        all_resolved = list(set(all_resolved + det_resolved))
+
     if all_resolved:
         memory_service.add_answered_questions(session_id, all_resolved)
 
-    # Use the LLM's dynamically generated followups
-    final_followups = llm_output.get("followup_questions", [])
+    # Post-filter LLM followup_questions: remove any whose slot is now filled
+    refreshed_slots = memory_service.load(session_id).clinical_slots
+    raw_followups = llm_output.get("followup_questions", [])
+    final_followups = clinical_slot_resolver.filter_questions_by_slots(
+        raw_followups, refreshed_slots
+    )
+    if len(raw_followups) != len(final_followups):
+        logger.info(
+            f"[{session_id}] SlotResolver post-filtered "
+            f"{len(raw_followups) - len(final_followups)} repeat follow-up(s)"
+        )
     llm_output["followup_questions"] = final_followups
-    
+
+    # Override suggested_replies with slot-targeted replies when LLM's are empty or generic
+    slot_replies = clinical_slot_resolver.get_slot_targeted_suggested_replies(
+        base_symptom_names, refreshed_slots
+    )
+    if slot_replies and not llm_output.get("suggested_replies"):
+        llm_output["suggested_replies"] = slot_replies
+
     # Persist the final questions we are actually sending to the user
     if final_followups:
         memory_service.add_asked_questions(session_id, final_followups)

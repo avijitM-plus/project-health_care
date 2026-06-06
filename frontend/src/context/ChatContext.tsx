@@ -26,6 +26,11 @@ interface ChatContextProps {
     uploadedReports: any[];
     imagingStudies: ImagingFindings[];
     addImagingStudy: (study: ImagingFindings) => void;
+    // Patient demographics (explicit user-provided, fed into every API call)
+    patientAge: number | null;
+    patientGender: string | null;
+    setPatientAge: (age: number | null) => void;
+    setPatientGender: (gender: string | null) => void;
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
@@ -35,6 +40,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [conversationId, setConversationId] = useState<string>(uuidv4());
     const [isTyping, setIsTyping] = useState<boolean>(false);
     const [imagingStudies, setImagingStudies] = useState<ImagingFindings[]>([]);
+    const [patientAge, setPatientAge] = useState<number | null>(null);
+    const [patientGender, setPatientGender] = useState<string | null>(null);
     
     // Derived state from latest AI response
     const accumulatedSymptoms = messages
@@ -76,6 +83,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setMessages([]);
         setConversationId(uuidv4());
         setImagingStudies([]);
+        // Keep age/gender across sessions — patient profile persists
     };
 
     return (
@@ -95,6 +103,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 uploadedReports,
                 imagingStudies,
                 addImagingStudy,
+                patientAge,
+                patientGender,
+                setPatientAge,
+                setPatientGender,
             }}
         >
             {children}

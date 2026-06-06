@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
-    const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy } = useChat();
+    const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy, patientAge, patientGender } = useChat();
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +39,9 @@ export const ChatPage: React.FC = () => {
         try {
             const response = await apiService.chat({
                 message: userText,
-                conversation_id: conversationId
+                conversation_id: conversationId,
+                age: patientAge ?? undefined,
+                gender: patientGender ?? undefined,
             });
 
             addMessage({
@@ -117,7 +119,9 @@ export const ChatPage: React.FC = () => {
             // Once analysis is done and merged into state, trigger the chat AI automatically
             const response = await apiService.chat({
                 message: `[SYSTEM] I have uploaded a medical report (${file.name}). Please review the clinical slots and longitudinal history, provide a brief clinical interpretation, and continue our triage.`,
-                conversation_id: conversationId
+                conversation_id: conversationId,
+                age: patientAge ?? undefined,
+                gender: patientGender ?? undefined,
             });
 
             addMessage({

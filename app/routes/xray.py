@@ -23,6 +23,7 @@ from app.models.schemas import XRayAnalysisResponse
 from app.services.medgemma_service import medgemma_service
 from app.services.memory_service import memory_service
 from app.services.llm_service import llm_service
+from app.services.clinical_slot_resolver import clinical_slot_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,10 @@ async def analyze_xray(
     imaging = medgemma_service.analyze_chest_xray(image_bytes, filename=safe_filename)
 
     # --- Step 2: Derive clinical slots from imaging findings ---
-    derived_slots = medgemma_service.derive_clinical_slots(imaging)
+    raw_slots = medgemma_service.derive_clinical_slots(imaging)
+    # Translate imaging keys → canonical NBQ slot names so followup_engine sees them
+    nbq_slots = clinical_slot_resolver.map_report_slots(raw_slots)
+    derived_slots = {**raw_slots, **nbq_slots}
 
     # --- Step 3: Persist into session (if conversation active) ---
     if conversation_id:
