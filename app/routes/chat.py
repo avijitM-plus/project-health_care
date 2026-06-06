@@ -9,6 +9,7 @@ from app.services.llm_service import llm_service
 from app.services.memory_service import memory_service
 from app.services.advice_engine import advice_engine
 from app.services.test_engine import test_engine
+from app.services.followup_engine import followup_engine
 import concurrent.futures
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,10 @@ async def chat_endpoint(request: ChatRequest):
     predictor_available = True
     try:
         patient_gender = state.metadata.gender or state.clinical_slots.get("gender")
-        predicted = predictor_service.predict_disease(base_symptom_names, gender=patient_gender)
+        patient_age = state.metadata.age or state.clinical_slots.get("age")
+        predicted = predictor_service.predict_disease(
+            base_symptom_names, gender=patient_gender, age=patient_age
+        )
     except Exception as e:
         logger.error(f"[{session_id}] Predictor failed: {e}")
         predicted = []
@@ -102,14 +106,21 @@ async def chat_endpoint(request: ChatRequest):
 
 
     # ------------------------------------------------------------------
-    # 7. Follow-up questions (V4 state-aware generation)
+    # 7. Slot-aware follow-up candidates (feed as hint to LLM)
     # ------------------------------------------------------------------
-    # We no longer use the static NBQ_GRAPH. The LLM will generate 
-    # differential-directed followups based on the prompt context.
+    # The followup_engine filters against already-filled clinical slots and
+    # answered question text, producing a set of candidate questions.
+    # These are injected into the prompt context so the LLM uses them as
+    # a slot-filtered starting point — preventing it from re-asking covered topics.
     answered_qs = state.answered_questions
     asked_qs = state.asked_questions
-    # We pass asked_qs to the LLM so it knows what NOT to ask.
-    followups = []
+    followups = followup_engine.generate_questions(
+        symptoms=base_symptom_names,
+        predicted_diseases=predicted,
+        clinical_slots=state.clinical_slots,
+        answered_questions=answered_qs,
+        asked_questions=asked_qs,
+    )
     # ------------------------------------------------------------------
     # 8. Safe advice (uses base names + peak urgency)
     # ------------------------------------------------------------------
@@ -119,6 +130,16 @@ async def chat_endpoint(request: ChatRequest):
     # 9. Build rich prompt context & run LLMs concurrently
     # ------------------------------------------------------------------
     prompt_context = memory_service.get_prompt_context(session_id)
+
+    # Append slot-aware candidate questions as a hint for the LLM
+    if followups:
+        candidates_hint = (
+            "\nSLOT-AWARE CANDIDATE QUESTIONS (pre-filtered: only unfilled slots) — "
+            "use as a starting point or ask something better:\n"
+            + "\n".join(f"  - {q}" for q in followups)
+        )
+        prompt_context = prompt_context + candidates_hint
+
     meta = state.metadata
     
     with concurrent.futures.ThreadPoolExecutor() as executor:

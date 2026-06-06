@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, ReportAnalysisResponse, XRayAnalysisResponse } from '../types/api';
+import type { ChatRequest, ChatResponse, ReportAnalysisResponse, XRayAnalysisResponse, ClinicalSummary } from '../types/api';
 
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
@@ -49,6 +49,32 @@ export const apiService = {
         }
 
         return response.json();
+    },
+
+    async getClinicalSummary(conversationId: string): Promise<ClinicalSummary> {
+        const response = await fetch(`${API_BASE_URL}/session/${conversationId}/summary`);
+        if (!response.ok) {
+            throw new Error(`Clinical summary failed: ${response.statusText}`);
+        }
+        return response.json();
+    },
+
+    async submitFeedback(
+        conversationId: string,
+        messageId: string,
+        rating: 'helpful' | 'incorrect',
+        aiReplyExcerpt?: string,
+    ): Promise<void> {
+        await fetch(`${API_BASE_URL}/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                conversation_id: conversationId,
+                message_id: messageId,
+                rating,
+                ai_reply_excerpt: aiReplyExcerpt?.slice(0, 200),
+            }),
+        });
     },
 
     async analyzeXray(file: File, conversationId?: string): Promise<XRayAnalysisResponse> {

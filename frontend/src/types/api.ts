@@ -28,6 +28,20 @@ export interface ChatRequest {
     chronic_conditions?: string | null;
 }
 
+export interface ClinicalSummary {
+    chief_complaint: string;
+    symptoms: string[];
+    clinical_findings: Record<string, any>;
+    uploaded_reports: { type: string; date: string; key_findings: string }[];
+    imaging_studies: { filename: string; impression: string; abnormalities: string[] }[];
+    peak_urgency: string;
+    possible_conditions: string[];
+    recommended_tests: string[];
+    recommended_next_steps: string;
+    conversation_turns: number;
+    disclaimer: string;
+}
+
 export interface ImagingFindings {
     study_id: string;
     modality: string;

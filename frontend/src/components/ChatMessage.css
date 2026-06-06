@@ -176,3 +176,60 @@
     line-height: 1.4;
     margin-top: 2px;
 }
+
+/* ── Feedback row ───────────────────────────────────────────────── */
+
+.feedback-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+}
+
+.feedback-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-right: 2px;
+}
+
+.feedback-btn {
+    background: none;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    transition: all 0.15s ease;
+}
+
+.feedback-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.feedback-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.feedback-active-good {
+    background-color: #dcfce7;
+    border-color: #16a34a;
+    color: #16a34a !important;
+}
+
+.feedback-active-bad {
+    background-color: #fee2e2;
+    border-color: #dc2626;
+    color: #dc2626 !important;
+}
+
+.feedback-thanks {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
+}

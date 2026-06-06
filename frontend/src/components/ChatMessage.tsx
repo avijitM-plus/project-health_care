@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Message } from '../context/ChatContext';
 import { UrgencyBadge } from './UrgencyBadge';
 import { DiseaseCard } from './DiseaseCard';
 import { FollowUpChips } from './FollowUpChips';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { apiService } from '../services/api';
+import { useChat } from '../context/ChatContext';
 import './ChatMessage.css';
 
 interface ChatMessageProps {
@@ -14,6 +16,23 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSelect }) => {
     const isAi = message.sender === 'ai';
     const metadata = message.responseMetadata;
+    const { conversationId } = useChat();
+    const [feedbackGiven, setFeedbackGiven] = useState<'helpful' | 'incorrect' | null>(null);
+
+    const handleFeedback = async (rating: 'helpful' | 'incorrect') => {
+        if (feedbackGiven) return;
+        setFeedbackGiven(rating);
+        try {
+            await apiService.submitFeedback(
+                conversationId,
+                message.id,
+                rating,
+                message.text,
+            );
+        } catch {
+            // Feedback is best-effort — don't surface errors to user
+        }
+    };
 
     return (
         <div className={`chat-message-wrapper ${isAi ? 'ai-msg' : 'user-msg'} animate-slide-up`}>
@@ -86,6 +105,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
                                 ⚠️ {metadata.disclaimer}
                             </div>
                         )}
+
+                        <div className="feedback-row">
+                            <span className="feedback-label">Was this helpful?</span>
+                            <button
+                                className={`feedback-btn ${feedbackGiven === 'helpful' ? 'feedback-active-good' : ''}`}
+                                onClick={() => handleFeedback('helpful')}
+                                disabled={!!feedbackGiven}
+                                title="Helpful"
+                            >
+                                <ThumbsUp size={14} />
+                            </button>
+                            <button
+                                className={`feedback-btn ${feedbackGiven === 'incorrect' ? 'feedback-active-bad' : ''}`}
+                                onClick={() => handleFeedback('incorrect')}
+                                disabled={!!feedbackGiven}
+                                title="Incorrect"
+                            >
+                                <ThumbsDown size={14} />
+                            </button>
+                            {feedbackGiven && (
+                                <span className="feedback-thanks">Thanks for your feedback</span>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

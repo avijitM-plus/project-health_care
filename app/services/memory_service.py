@@ -264,13 +264,21 @@ class MemoryService:
         state = self.load(session_id)
         parts: list[str] = []
 
-        # --- Structured Clinical Slots ---
+        # --- Conversational Stage ---
         parts.append(f"CURRENT CONVERSATIONAL STAGE: {state.stage} (1=Chief complaint, 2=Characterization, 3=Red flags, 4=Differential refinement, 5=Disposition guidance)")
-        
+
+        # --- Filled clinical slots (resolved evidence — NEVER ask about these again) ---
         if state.clinical_slots:
-            parts.append(
-                "STRUCTURED CLINICAL SLOTS:\n" + json.dumps(state.clinical_slots, indent=2)
-            )
+            filled_lines = [
+                f"  {k}: {v}"
+                for k, v in state.clinical_slots.items()
+                if v not in (None, "", "UNKNOWN")
+            ]
+            if filled_lines:
+                parts.append(
+                    "FILLED CLINICAL SLOTS — RESOLVED EVIDENCE (do NOT ask about any topic covered here):\n"
+                    + "\n".join(filled_lines)
+                )
 
         # --- Accumulated symptoms with metadata ---
         if state.symptoms:

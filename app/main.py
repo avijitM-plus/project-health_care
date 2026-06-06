@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.routes import health, chat, analyze, report, session, xray
+from app.routes import health, chat, analyze, report, session, xray, feedback
 import time
 import logging
 from collections import defaultdict
@@ -73,6 +73,7 @@ app.include_router(analyze.router, tags=["Reports"])
 app.include_router(report.router, tags=["Reports"])
 app.include_router(session.router, tags=["Session"])
 app.include_router(xray.router, tags=["Imaging"])
+app.include_router(feedback.router, tags=["Feedback"])
 
 
 # --- Startup event: log memory configuration ---
