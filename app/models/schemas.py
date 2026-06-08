@@ -82,6 +82,9 @@ class ConversationState(BaseModel):
     # Test-engine result cache — avoids redundant LLM calls when clinical state is unchanged
     cached_tests: list[dict] = []
     tests_cache_key: str = ""
+    # Working diagnosis — clinical reasoning layer
+    working_diagnosis: dict | None = None
+    diagnosis_history: list[dict] = []
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +133,9 @@ class ChatResponse(BaseModel):
     suggested_replies: List[str] = []
     recommended_tests: List[dict] = []
     reports: List[ReportData] = []
+    working_diagnosis: Optional[dict] = None
+    action_plan: Optional[dict] = None
+    clinical_stage: str = "information_gathering"
 
 class HealthResponse(BaseModel):
     status: str

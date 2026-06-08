@@ -264,8 +264,35 @@ class MemoryService:
         state = self.load(session_id)
         parts: list[str] = []
 
-        # --- Conversational Stage ---
-        parts.append(f"CURRENT CONVERSATIONAL STAGE: {state.stage} (1=Chief complaint, 2=Characterization, 3=Red flags, 4=Differential refinement, 5=Disposition guidance)")
+        # --- Clinical Stage (named) + numeric stage ---
+        from app.services.working_diagnosis_engine import derive_clinical_stage, WorkingDiagnosis
+        _stage_descriptions = {
+            "information_gathering": "Collecting chief complaint and initial characterization",
+            "differential_generation": "Enough evidence to generate differentials; narrowing the gap",
+            "working_diagnosis": "Working diagnosis established — confirm severity and complications",
+            "monitoring": "Management plan in place; monitoring for improvement or deterioration",
+            "resolved": "Patient reports recovery; confirm resolution",
+            "emergency": "EMERGENCY active — immediate care redirection",
+        }
+        wd_obj = None
+        if state.working_diagnosis:
+            try:
+                wd_obj = WorkingDiagnosis(**{
+                    k: v for k, v in state.working_diagnosis.items()
+                    if k in WorkingDiagnosis.__dataclass_fields__
+                })
+            except Exception:
+                pass
+        stage_name = derive_clinical_stage(
+            urgency=state.peak_urgency,
+            working_diagnosis=wd_obj,
+            predictions=state.predictions,
+            turn_count=state.turn_count,
+        )
+        stage_desc = _stage_descriptions.get(stage_name, "")
+        parts.append(
+            f"CURRENT CLINICAL STAGE: {stage_name} (numeric={state.stage}) — {stage_desc}"
+        )
 
         # --- Filled clinical slots (resolved evidence — NEVER ask about these again) ---
         if state.clinical_slots:
@@ -310,6 +337,25 @@ class MemoryService:
             )
         if demo_parts:
             parts.append("PATIENT INFO: " + " | ".join(demo_parts))
+
+        # --- Working Diagnosis (Clinical Reasoning Layer) ---
+        if state.working_diagnosis and state.working_diagnosis.get("working_diagnosis"):
+            wd = state.working_diagnosis
+            wlines = [
+                f"  Diagnosis: {wd['working_diagnosis']}",
+                f"  Confidence: {wd.get('confidence_level', 'UNKNOWN')} | Severity: {wd.get('severity', 'UNKNOWN')} | Status: {wd.get('status', 'active')}",
+            ]
+            if wd.get("supporting_evidence"):
+                wlines.append("  Supporting evidence: " + ", ".join(wd["supporting_evidence"]))
+            if wd.get("missing_evidence"):
+                wlines.append("  Missing evidence: " + ", ".join(wd["missing_evidence"][:3]))
+            if wd.get("alternative_conditions"):
+                wlines.append("  Alternatives: " + ", ".join(wd["alternative_conditions"]))
+            if wd.get("red_flags"):
+                wlines.append("  Active red flags: " + ", ".join(wd["red_flags"]))
+            if wd.get("escalation_needed"):
+                wlines.append("  ESCALATION NEEDED: Yes")
+            parts.append("WORKING DIAGNOSIS:\n" + "\n".join(wlines))
 
         # --- Previous predictions ---
         if state.predictions:
@@ -386,6 +432,29 @@ class MemoryService:
         """Update the longitudinal trend summary for this session."""
         state = self.load(session_id)
         state.trend_summary = trend_summary
+
+    def update_working_diagnosis(
+        self, session_id: str, wd_dict: dict | None
+    ) -> None:
+        """Store the latest working diagnosis and append a snapshot to history."""
+        state = self.load(session_id)
+        state.working_diagnosis = wd_dict
+        if wd_dict and wd_dict.get("working_diagnosis"):
+            history = state.diagnosis_history
+            last_name = history[-1].get("working_diagnosis") if history else None
+            if last_name != wd_dict.get("working_diagnosis"):
+                history.append(dict(wd_dict))
+            else:
+                # Update the latest snapshot in place
+                history[-1] = dict(wd_dict)
+
+    def update_diagnosis_status(self, session_id: str, status: str) -> None:
+        """Transition working diagnosis status: active → improving → resolved."""
+        state = self.load(session_id)
+        if state.working_diagnosis:
+            state.working_diagnosis["status"] = status
+            if state.diagnosis_history:
+                state.diagnosis_history[-1]["status"] = status
 
     def update_cached_tests(
         self, session_id: str, tests: list[dict], cache_key: str

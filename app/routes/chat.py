@@ -41,6 +41,11 @@ from app.services.advice_engine import advice_engine
 from app.services.test_engine import test_engine
 from app.services.followup_engine import followup_engine
 from app.services.clinical_slot_resolver import clinical_slot_resolver
+from app.services.clinical_context import clinical_context_extractor
+from app.services.working_diagnosis_engine import (
+    working_diagnosis_engine, derive_clinical_stage, detect_resolution
+)
+from app.services.diagnostic_action_engine import diagnostic_action_engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -159,6 +164,50 @@ async def chat_endpoint(request: ChatRequest):
         predictor_available = False
     memory_service.update_predictions(session_id, predicted)
     t = _tick(session_id, "predictor", t)
+
+    # ── 5b. Clinical context + Working Diagnosis (pure Python, ~1ms) ─────────
+    t = time.perf_counter()
+    clinical_ctx = clinical_context_extractor.extract(
+        user_msg, symptoms=base_symptom_names, clinical_slots=state.clinical_slots
+    )
+    reloaded = memory_service.load(session_id)
+    wd = working_diagnosis_engine.derive(
+        predictions=predicted,
+        symptoms=base_symptom_names,
+        clinical_slots=reloaded.clinical_slots,
+        reports=reloaded.reports,
+        imaging_studies=reloaded.imaging_studies,
+        urgency=reloaded.peak_urgency,
+        turn_count=turn,
+        clinical_context=clinical_ctx,
+        user_message=user_msg,
+    )
+
+    # Merge with existing WD if no new one was derived
+    prev_wd = reloaded.working_diagnosis
+    resolution = detect_resolution(user_msg)
+    if wd is not None:
+        wd_dict = wd.to_dict()
+        if resolution:
+            wd_dict["status"] = resolution
+    elif prev_wd:
+        wd_dict = dict(prev_wd)
+        if resolution:
+            wd_dict["status"] = resolution
+    else:
+        wd_dict = None
+
+    memory_service.update_working_diagnosis(session_id, wd_dict)
+    t = _tick(session_id, "working_diagnosis", t)
+
+    # Action plan — pure Python, ~0ms
+    action_plan: dict | None = None
+    if wd_dict and wd_dict.get("working_diagnosis"):
+        action_plan = diagnostic_action_engine.get_action_plan(
+            working_diagnosis_name=wd_dict["working_diagnosis"],
+            severity=wd_dict.get("severity", "MODERATE"),
+            urgency=reloaded.peak_urgency,
+        )
 
     # ── 6. Emergency detection (rule-based, no LLM) ──────────────────────────
     t = time.perf_counter()
@@ -351,6 +400,28 @@ async def chat_endpoint(request: ChatRequest):
     llm_output["resolved_questions"] = all_resolved
     llm_output["recommended_tests"] = recommended_tests
     llm_output["reports"] = state.reports
+
+    # Working diagnosis + action plan
+    llm_output["working_diagnosis"] = wd_dict
+    llm_output["action_plan"] = action_plan
+
+    # Named clinical stage (derived from WD + urgency, not from LLM numeric stage)
+    from app.services.working_diagnosis_engine import WorkingDiagnosis as WD_cls
+    wd_obj_final: WD_cls | None = None
+    if wd_dict:
+        try:
+            wd_obj_final = WD_cls(**{
+                k: v for k, v in wd_dict.items()
+                if k in WD_cls.__dataclass_fields__
+            })
+        except Exception:
+            pass
+    llm_output["clinical_stage"] = derive_clinical_stage(
+        urgency=urgency,
+        working_diagnosis=wd_obj_final,
+        predictions=predicted,
+        turn_count=turn,
+    )
 
     total_ms = (time.perf_counter() - turn_start) * 1000
     logger.info(
