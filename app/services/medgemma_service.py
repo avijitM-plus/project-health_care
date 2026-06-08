@@ -1,25 +1,39 @@
 """
-MedGemma Service — dedicated chest X-ray analysis via MedGemma 4B.
+MedGemma Service — multi-modality medical image analysis.
 
-Completely separate from conversational logic. Responsibilities:
-  - Image validation and preprocessing (resize, JPEG conversion)
-  - HuggingFace Inference Endpoint API call (OpenAI-compatible format)
-  - JSON response parsing from MedGemma output
-  - Structured ImagingFindings extraction
-  - Safe mock/error fallbacks when not configured
+Endpoint: Azure Container Apps (OpenAI-compatible /v1/chat/completions)
+  https://medgemma-app.bluegrass-9bc64ae5.southeastasia.azurecontainerapps.io
+Auth:     Bearer ollama
+Model:    medgemma
 
-Configuration (via environment variables):
-  MEDGEMMA_ENDPOINT  — HuggingFace dedicated endpoint base URL
-                       e.g. https://xyz.us-east-1.aws.endpoints.huggingface.cloud
-  HF_TOKEN           — HuggingFace API token with inference permission
-  MEDGEMMA_TIMEOUT   — Request timeout in seconds (default: 60)
+Supported modalities:
+  chest_xray     — radiograph interpretation
+  skin_lesion    — dermatological lesion analysis
+  wound          — wound / injury assessment
+  medical_photo  — general medical photographs
+
+Architecture:
+  analyze_medical_image()  — primary entry point (all modalities)
+  analyze_chest_xray()     — backward-compatible wrapper
+  check_medgemma_health()  — endpoint liveness probe
+  derive_clinical_slots()  — findings → session state injection
+
+Configuration (env vars):
+  MEDGEMMA_ENDPOINT   — base URL (default: Azure endpoint above)
+  MEDGEMMA_API_KEY    — bearer token (default: ollama)
+  MEDGEMMA_MODEL      — model name (default: medgemma)
+  MEDGEMMA_TIMEOUT    — per-request timeout seconds (default: 60)
+  MEDGEMMA_MAX_RETRIES — retry attempts on failure (default: 3)
 """
 import base64
 import json
 import logging
 import os
 import re
+import time
+import random
 from io import BytesIO
+from typing import Any
 
 import httpx
 from PIL import Image
@@ -28,40 +42,170 @@ from app.models.schemas import ImagingFindings
 
 logger = logging.getLogger(__name__)
 
-MEDGEMMA_ENDPOINT = os.getenv("MEDGEMMA_ENDPOINT", "").rstrip("/")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+MEDGEMMA_BASE_URL = os.getenv(
+    "MEDGEMMA_ENDPOINT",
+    "https://medgemma-app.bluegrass-9bc64ae5.southeastasia.azurecontainerapps.io",
+).rstrip("/")
+MEDGEMMA_API_KEY = os.getenv("MEDGEMMA_API_KEY", "ollama")
+MEDGEMMA_MODEL = os.getenv("MEDGEMMA_MODEL", "medgemma")
 MEDGEMMA_TIMEOUT = int(os.getenv("MEDGEMMA_TIMEOUT", "60"))
+MEDGEMMA_MAX_RETRIES = int(os.getenv("MEDGEMMA_MAX_RETRIES", "3"))
 MEDGEMMA_MAX_IMAGE_DIM = 1024
 
-CHEST_XRAY_PROMPT = """\
-You are an expert radiologist AI specialized in chest X-ray interpretation.
-Analyze the provided chest X-ray image and return ONLY a valid JSON object.
+_BASE_BACKOFF = 2.0   # seconds
+_MAX_BACKOFF = 15.0
+
+
+# ---------------------------------------------------------------------------
+# System prompt (shared across all modalities)
+# ---------------------------------------------------------------------------
+_SYSTEM_PROMPT = (
+    "You are an expert radiologist and medical imaging specialist. "
+    "Analyze the uploaded image and provide structured clinical findings."
+)
+
+# ---------------------------------------------------------------------------
+# Modality-specific user prompts
+# ---------------------------------------------------------------------------
+_MODALITY_PROMPTS: dict[str, str] = {
+    "chest_xray": """\
+Analyze this chest X-ray image and return ONLY a valid JSON object.
 
 Required JSON format:
 {
-  "findings": ["observation 1", "observation 2"],
-  "abnormalities": ["pathological finding 1", "pathological finding 2"],
-  "impression": "One concise overall clinical impression sentence",
+  "findings": ["anatomical observation 1", "observation 2"],
+  "abnormalities": ["pathological finding 1"],
+  "impression": "One concise overall clinical impression",
+  "urgency": "NONE",
   "confidence": 0.75,
-  "urgency_hint": "NONE"
+  "recommended_followup": ["clinical question directly relevant to findings"],
+  "clinical_slots": {"possible_pneumonia": true, "lung_opacity": true}
 }
 
 Field definitions:
-- findings: All visible anatomical observations (e.g., "right lower lobe opacity", "costophrenic angles clear", "trachea midline", "cardiac silhouette normal size")
-- abnormalities: Suspected pathological findings ONLY — empty list [] if none detected (e.g., "possible right lower lobe pneumonia", "possible pleural effusion")
+- findings: All visible anatomical observations (normal and abnormal)
+- abnormalities: Suspected pathological findings ONLY — empty list [] if none
 - impression: Single sentence summarizing the overall clinical picture
-- confidence: Float 0.0–1.0 reflecting analysis certainty (0.5 = moderate uncertainty; be conservative)
-- urgency_hint: Exactly one of NONE | LOW | MEDIUM | HIGH | EMERGENCY
+- urgency: Exactly one of NONE | LOW | MEDIUM | HIGH | EMERGENCY
+- confidence: Float 0.0–1.0 (0.5 = moderate uncertainty; be conservative)
+- recommended_followup: 1-3 clinical follow-up questions triggered by findings
+  Examples: if opacity found → ask about fever, productive cough, breathlessness
+            if cardiomegaly → ask about leg swelling, orthopnoea
+            if pneumothorax → ask about sudden chest pain, breathlessness
+- clinical_slots: Boolean dict of detected findings. Valid keys:
+    possible_pneumonia, lung_opacity, pleural_effusion_possible,
+    cardiomegaly_possible, pneumothorax_possible, lung_consolidation,
+    atelectasis_possible, right_lower_lobe_involvement, left_lower_lobe_involvement,
+    bilateral_lung_involvement, hilar_abnormality, mediastinal_widening_possible,
+    pulmonary_edema_possible, lung_mass_possible, pulmonary_nodule_possible
 
-Safety requirements:
-- Never state diagnoses as confirmed facts — use "possible", "may suggest", "appears to show"
-- If image quality is poor, note it in findings and lower confidence below 0.4
-- If the image is NOT a chest X-ray, return: findings: ["Image does not appear to be a chest X-ray"], abnormalities: [], confidence: 0.0, urgency_hint: "NONE"
-- Output ONLY the JSON object — no markdown, no commentary outside JSON
-"""
+Safety rules:
+- Never state diagnoses as confirmed — use "possible", "may suggest", "appears to show"
+- If image quality is poor, note in findings and lower confidence below 0.4
+- If NOT a chest X-ray: findings=["Image does not appear to be a chest X-ray"], abnormalities=[], confidence=0.0
+- Output ONLY the JSON object — no markdown fences, no commentary
+""",
 
-# Keyword → clinical slot name mapping for automatic slot derivation
-FINDING_SLOT_MAP: dict[str, str] = {
+    "skin_lesion": """\
+Analyze this skin lesion image and return ONLY a valid JSON object.
+
+Required JSON format:
+{
+  "findings": ["lesion shape/size description", "color and border detail"],
+  "abnormalities": ["concerning morphological feature"],
+  "impression": "One concise overall clinical impression",
+  "urgency": "NONE",
+  "confidence": 0.7,
+  "recommended_followup": ["follow-up question relevant to lesion features"],
+  "clinical_slots": {"possible_melanoma": false, "skin_infection_possible": true}
+}
+
+Field definitions:
+- findings: Shape, size, color, border regularity, surface texture, distribution
+- abnormalities: Concerning features using ABCDE criteria (asymmetry, border irregularity,
+    color variation, diameter >6mm, elevation/evolution)
+- impression: Clinical impression — mention ABCDE criteria where applicable
+- urgency: NONE | LOW | MEDIUM | HIGH | EMERGENCY
+- confidence: Float 0.0–1.0 (be conservative for photo-based assessment)
+- recommended_followup: Questions about duration, recent changes, itching, bleeding, family history of melanoma
+- clinical_slots: Boolean dict using keys: possible_melanoma, possible_skin_carcinoma,
+    skin_infection_possible, contact_dermatitis_possible, psoriasis_possible,
+    eczema_possible, skin_abscess_possible, cellulitis_possible, lesion_asymmetry,
+    irregular_lesion_border, lesion_color_variation
+
+Safety rules:
+- Never diagnose skin cancer — say "warrants urgent dermatological evaluation"
+- If image quality is insufficient, lower confidence below 0.4
+- Output ONLY the JSON object — no markdown
+""",
+
+    "wound": """\
+Analyze this wound image and return ONLY a valid JSON object.
+
+Required JSON format:
+{
+  "findings": ["wound size estimate", "wound bed color and condition"],
+  "abnormalities": ["sign of infection or complication"],
+  "impression": "One concise wound stage and healing status assessment",
+  "urgency": "NONE",
+  "confidence": 0.7,
+  "recommended_followup": ["clinical question about wound history or symptoms"],
+  "clinical_slots": {"wound_infection_possible": true, "wound_healing_normal": false}
+}
+
+Field definitions:
+- findings: Size estimation, wound bed color (red/yellow/black), edges, surrounding tissue state, visible exudate
+- abnormalities: Signs of infection (perilesional erythema, purulent exudate, necrosis, devitalized tissue)
+- impression: Wound classification (superficial/partial/full thickness) and healing trajectory
+- urgency: NONE | LOW | MEDIUM | HIGH | EMERGENCY (EMERGENCY for necrotizing fasciitis signs)
+- confidence: Float 0.0–1.0
+- recommended_followup: Questions about pain level, wound duration, fever, tetanus status, mechanism of injury
+- clinical_slots: Boolean dict using: wound_infection_possible, wound_healing_normal,
+    wound_necrosis, wound_deep, wound_requires_closure, wound_requires_debridement
+
+Safety rules:
+- Do not estimate exact tissue depth without clinical assessment
+- If image quality is insufficient, lower confidence below 0.4
+- Output ONLY the JSON object — no markdown
+""",
+
+    "medical_photo": """\
+Analyze this medical photograph and return ONLY a valid JSON object.
+
+Required JSON format:
+{
+  "findings": ["visual clinical finding 1", "finding 2"],
+  "abnormalities": ["abnormal or concerning finding"],
+  "impression": "One concise overall clinical impression",
+  "urgency": "NONE",
+  "confidence": 0.6,
+  "recommended_followup": ["relevant clinical follow-up question"],
+  "clinical_slots": {}
+}
+
+Field definitions:
+- findings: All visible clinical observations
+- abnormalities: Concerning or pathological findings only
+- impression: Overall clinical interpretation using cautious language
+- urgency: NONE | LOW | MEDIUM | HIGH | EMERGENCY
+- confidence: Float 0.0–1.0 (be conservative for general medical photography)
+- recommended_followup: Clinical questions based on detected findings
+- clinical_slots: Boolean dict of key clinical findings detected (use descriptive key names)
+
+Safety rules:
+- Use cautious language: "may suggest", "appears to show", "warrants evaluation"
+- If image is not a medical photograph, note this in findings
+- Output ONLY the JSON object — no markdown
+""",
+}
+
+# ---------------------------------------------------------------------------
+# Finding → clinical slot keyword maps (used as fallback enrichment)
+# ---------------------------------------------------------------------------
+_CHEST_XRAY_SLOT_MAP: dict[str, str] = {
     "pneumonia": "possible_pneumonia",
     "opacity": "lung_opacity",
     "effusion": "pleural_effusion_possible",
@@ -83,122 +227,250 @@ FINDING_SLOT_MAP: dict[str, str] = {
     "mediastinal": "mediastinal_widening_possible",
 }
 
+_SKIN_SLOT_MAP: dict[str, str] = {
+    "melanoma": "possible_melanoma",
+    "carcinoma": "possible_skin_carcinoma",
+    "infection": "skin_infection_possible",
+    "abscess": "skin_abscess_possible",
+    "cellulitis": "cellulitis_possible",
+    "dermatitis": "contact_dermatitis_possible",
+    "psoriasis": "psoriasis_possible",
+    "eczema": "eczema_possible",
+    "asymmetr": "lesion_asymmetry",
+    "irregular border": "irregular_lesion_border",
+}
+
+_WOUND_SLOT_MAP: dict[str, str] = {
+    "infect": "wound_infection_possible",
+    "necrosis": "wound_necrosis",
+    "necrotic": "wound_necrosis",
+    "healing": "wound_healing_normal",
+    "deep": "wound_deep",
+    "closure": "wound_requires_closure",
+    "purulent": "wound_infection_possible",
+    "erythema": "wound_infection_possible",
+}
+
+_MODALITY_SLOT_MAPS: dict[str, dict[str, str]] = {
+    "chest_xray": _CHEST_XRAY_SLOT_MAP,
+    "skin_lesion": _SKIN_SLOT_MAP,
+    "wound": _WOUND_SLOT_MAP,
+    "medical_photo": {},
+}
+
+MODALITY_LABELS: dict[str, str] = {
+    "chest_xray": "Chest X-Ray",
+    "skin_lesion": "Skin Lesion",
+    "wound": "Wound / Injury",
+    "medical_photo": "Medical Photograph",
+}
+
 
 class MedGemmaService:
-    """Interfaces with MedGemma 4B via HuggingFace Inference Endpoint."""
+    """
+    Multi-modality medical image analysis via Azure-hosted MedGemma.
+    Uses OpenAI-compatible /v1/chat/completions endpoint.
+    """
 
     def __init__(self) -> None:
-        self.endpoint = MEDGEMMA_ENDPOINT
-        self.hf_token = HF_TOKEN
-        self.available = bool(self.endpoint and self.hf_token)
-
-        if self.available:
-            logger.info(f"MedGemmaService: ready — endpoint={self.endpoint}")
-        else:
-            logger.warning(
-                "MedGemmaService: MEDGEMMA_ENDPOINT or HF_TOKEN not configured — "
-                "imaging analysis will return unavailable responses. "
-                "Set both env vars to enable real MedGemma inference."
-            )
+        self.base_url = MEDGEMMA_BASE_URL
+        self.api_key = MEDGEMMA_API_KEY
+        self.model = MEDGEMMA_MODEL
+        self._completions_url = f"{self.base_url}/v1/chat/completions"
+        logger.info(
+            f"MedGemmaService: endpoint={self.base_url}, model={self.model}, "
+            f"timeout={MEDGEMMA_TIMEOUT}s, max_retries={MEDGEMMA_MAX_RETRIES}"
+        )
 
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
 
-    def analyze_chest_xray(self, image_bytes: bytes, filename: str = "") -> ImagingFindings:
-        """Analyze a chest X-ray image and return structured findings."""
-        if not self.available:
-            logger.info("MedGemma not configured — returning unavailable response")
-            return self._unavailable_response(filename)
+    def analyze_medical_image(
+        self,
+        image_bytes: bytes,
+        modality_hint: str | None = None,
+        filename: str = "",
+    ) -> ImagingFindings:
+        """
+        Primary entry point. Analyzes a medical image of any supported modality.
+
+        Args:
+            image_bytes:   Raw image bytes (JPEG, PNG).
+            modality_hint: 'chest_xray' | 'skin_lesion' | 'wound' | 'medical_photo'.
+                           Defaults to 'chest_xray' if unspecified or unrecognized.
+            filename:      Original filename for logging and response metadata.
+        """
+        modality = modality_hint if modality_hint in _MODALITY_PROMPTS else "chest_xray"
 
         try:
             b64_image, mime_type = self._preprocess(image_bytes)
-            raw_text = self._call_hf_endpoint(b64_image, mime_type)
-            findings = self._parse_response(raw_text, filename)
+            raw_text = self._call_with_retries(b64_image, mime_type, modality)
+            findings = self._parse_response(raw_text, modality, filename)
             logger.info(
-                f"MedGemma [{filename}]: {len(findings.findings)} findings, "
+                f"MedGemma [{filename}] modality={modality}: "
+                f"{len(findings.findings)} findings, "
                 f"{len(findings.abnormalities)} abnormalities, "
                 f"confidence={findings.confidence:.2f}, urgency={findings.urgency_hint}"
             )
             return findings
-        except httpx.HTTPStatusError as e:
-            logger.error(f"MedGemma HTTP error [{filename}]: {e.response.status_code} — {e}")
-            return self._error_response(filename)
-        except httpx.TimeoutException:
-            logger.error(f"MedGemma timeout [{filename}] after {MEDGEMMA_TIMEOUT}s")
-            return self._error_response(filename)
         except Exception as e:
             logger.error(f"MedGemma unexpected error [{filename}]: {e}")
-            return self._error_response(filename)
+            return self._error_response(modality, filename)
+
+    def analyze_chest_xray(self, image_bytes: bytes, filename: str = "") -> ImagingFindings:
+        """Backward-compatible wrapper — delegates to analyze_medical_image."""
+        return self.analyze_medical_image(
+            image_bytes, modality_hint="chest_xray", filename=filename
+        )
+
+    def check_medgemma_health(self) -> dict:
+        """
+        Verify MedGemma endpoint availability via GET /v1/models.
+
+        Returns:
+            {"available": bool, "latency_ms": int | None, "error": str | None}
+        """
+        start = time.time()
+        try:
+            with httpx.Client(timeout=10) as client:
+                response = client.get(
+                    f"{self.base_url}/v1/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                latency_ms = int((time.time() - start) * 1000)
+                available = response.status_code < 500
+                logger.info(
+                    f"MedGemma health check: status={response.status_code}, "
+                    f"latency={latency_ms}ms"
+                )
+                return {"available": available, "latency_ms": latency_ms, "error": None}
+        except httpx.TimeoutException:
+            logger.warning("MedGemma health check: timeout")
+            return {"available": False, "latency_ms": None, "error": "timeout"}
+        except Exception as e:
+            logger.warning(f"MedGemma health check: failed — {e}")
+            return {"available": False, "latency_ms": None, "error": str(e)}
 
     def derive_clinical_slots(self, findings: ImagingFindings) -> dict:
-        """Derive boolean clinical slots from imaging findings for state injection."""
+        """
+        Build a boolean clinical-slot dict from imaging findings.
+
+        Priority order:
+          1. MedGemma's own clinical_slots (parsed from structured JSON output)
+          2. Keyword extraction from findings/abnormalities/impression text
+        """
+        modality = findings.modality
+        slot_map = _MODALITY_SLOT_MAPS.get(modality, _CHEST_XRAY_SLOT_MAP)
+
         slots: dict = {
             "xray_uploaded": True,
             "xray_abnormal": len(findings.abnormalities) > 0,
+            f"{modality}_analyzed": True,
         }
 
+        # MedGemma's structured clinical_slots take priority
+        if findings.clinical_slots:
+            slots.update(findings.clinical_slots)
+
+        # Keyword-based enrichment for slots MedGemma didn't explicitly output
         combined_text = " ".join(
             findings.findings + findings.abnormalities + [findings.impression]
         ).lower()
-
-        for keyword, slot_name in FINDING_SLOT_MAP.items():
-            if keyword in combined_text:
+        for keyword, slot_name in slot_map.items():
+            if keyword in combined_text and slot_name not in slots:
                 slots[slot_name] = True
 
         if findings.urgency_hint not in ("NONE", ""):
-            slots["xray_urgency_hint"] = findings.urgency_hint
+            slots["imaging_urgency_hint"] = findings.urgency_hint
 
         return slots
 
     # ------------------------------------------------------------------
-    # Internal: preprocessing
+    # Internal: image preprocessing
     # ------------------------------------------------------------------
 
     def _preprocess(self, image_bytes: bytes) -> tuple[str, str]:
-        """Resize image to max dimension and return (base64_jpeg, mime_type)."""
+        """Resize to max dimension, convert to JPEG, return (base64, mime_type)."""
         img = Image.open(BytesIO(image_bytes)).convert("RGB")
-
         if max(img.width, img.height) > MEDGEMMA_MAX_IMAGE_DIM:
             img.thumbnail((MEDGEMMA_MAX_IMAGE_DIM, MEDGEMMA_MAX_IMAGE_DIM), Image.LANCZOS)
-
-        output = BytesIO()
-        img.save(output, format="JPEG", quality=90)
-        output.seek(0)
-        b64 = base64.b64encode(output.read()).decode("utf-8")
-        return b64, "image/jpeg"
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode("utf-8"), "image/jpeg"
 
     # ------------------------------------------------------------------
-    # Internal: API call
+    # Internal: API call with exponential backoff retries
     # ------------------------------------------------------------------
 
-    def _call_hf_endpoint(self, b64_image: str, mime_type: str) -> str:
-        """POST to HuggingFace endpoint (OpenAI-compatible chat completions format)."""
-        url = f"{self.endpoint}/v1/chat/completions"
+    def _call_with_retries(self, b64_image: str, mime_type: str, modality: str) -> str:
+        """Call MedGemma endpoint with retry/backoff on transient failures."""
+        last_error: Exception | None = None
+
+        for attempt in range(MEDGEMMA_MAX_RETRIES):
+            try:
+                return self._call_endpoint(b64_image, mime_type, modality)
+            except httpx.TimeoutException as e:
+                last_error = e
+                logger.warning(
+                    f"MedGemma timeout (attempt {attempt + 1}/{MEDGEMMA_MAX_RETRIES})"
+                )
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                status = e.response.status_code
+                logger.warning(
+                    f"MedGemma HTTP {status} (attempt {attempt + 1}/{MEDGEMMA_MAX_RETRIES})"
+                )
+                if 400 <= status < 500:
+                    break  # client errors are not retryable
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"MedGemma error (attempt {attempt + 1}/{MEDGEMMA_MAX_RETRIES}): {e}"
+                )
+
+            if attempt < MEDGEMMA_MAX_RETRIES - 1:
+                backoff = min(_BASE_BACKOFF * (2 ** attempt), _MAX_BACKOFF)
+                jitter = random.uniform(0, backoff * 0.25)
+                time.sleep(backoff + jitter)
+
+        raise last_error or RuntimeError("MedGemma: all retry attempts exhausted")
+
+    def _call_endpoint(self, b64_image: str, mime_type: str, modality: str) -> str:
+        """POST to /v1/chat/completions (OpenAI-compatible multimodal format)."""
         headers = {
-            "Authorization": f"Bearer {self.hf_token}",
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
         payload = {
-            "model": "tgi",
+            "model": self.model,
             "messages": [
+                {
+                    "role": "system",
+                    "content": _SYSTEM_PROMPT,
+                },
                 {
                     "role": "user",
                     "content": [
                         {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{mime_type};base64,{b64_image}"},
+                            "type": "text",
+                            "text": _MODALITY_PROMPTS[modality],
                         },
-                        {"type": "text", "text": CHEST_XRAY_PROMPT},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{b64_image}"
+                            },
+                        },
                     ],
-                }
+                },
             ],
             "max_tokens": 1024,
             "temperature": 0.1,
         }
-
         with httpx.Client(timeout=MEDGEMMA_TIMEOUT) as client:
-            response = client.post(url, headers=headers, json=payload)
+            response = client.post(self._completions_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
@@ -207,33 +479,52 @@ class MedGemmaService:
     # Internal: response parsing
     # ------------------------------------------------------------------
 
-    def _parse_response(self, raw: str, filename: str) -> ImagingFindings:
-        """Parse MedGemma JSON text into ImagingFindings."""
+    def _parse_response(self, raw: str, modality: str, filename: str) -> ImagingFindings:
+        """Parse MedGemma JSON output into a typed ImagingFindings object."""
         parsed = self._extract_json(raw)
 
         if parsed and isinstance(parsed, dict):
+            impression_raw = parsed.get("impression", "")
+            impression = (
+                " ".join(impression_raw)
+                if isinstance(impression_raw, list)
+                else str(impression_raw)
+            ).strip()
+
+            raw_slots = parsed.get("clinical_slots")
+            clinical_slots = raw_slots if isinstance(raw_slots, dict) else {}
+
             return ImagingFindings(
-                modality="chest_xray",
+                modality=modality,
                 findings=self._safe_list(parsed.get("findings")),
                 abnormalities=self._safe_list(parsed.get("abnormalities")),
-                impression=str(parsed.get("impression", "")).strip(),
+                impression=impression,
                 confidence=self._safe_float(parsed.get("confidence"), default=0.5),
-                urgency_hint=self._safe_urgency(parsed.get("urgency_hint")),
+                urgency_hint=self._safe_urgency(
+                    parsed.get("urgency") or parsed.get("urgency_hint")
+                ),
+                recommended_followup=self._safe_list(parsed.get("recommended_followup")),
+                clinical_slots=clinical_slots,
                 filename=filename,
             )
 
-        logger.warning(f"MedGemma response not JSON-parseable — treating text as impression")
+        logger.warning(
+            f"MedGemma [{filename}]: response not JSON-parseable — treating text as impression"
+        )
         return ImagingFindings(
-            modality="chest_xray",
+            modality=modality,
             findings=["Analysis completed — structured extraction unavailable"],
             abnormalities=[],
-            impression=(raw[:400] if raw else "Analysis result unavailable"),
+            impression=raw[:400] if raw else "Analysis result unavailable",
             confidence=0.3,
             urgency_hint="NONE",
+            recommended_followup=[],
+            clinical_slots={},
             filename=filename,
         )
 
     def _extract_json(self, raw: str) -> dict | None:
+        """Try strict parse → markdown-stripped → first-brace heuristic."""
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
@@ -243,8 +534,7 @@ class MedGemmaService:
             first = cleaned.find("{")
             last = cleaned.rfind("}")
             if first != -1 and last > first:
-                candidate = cleaned[first : last + 1]
-                candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
+                candidate = re.sub(r",\s*([}\]])", r"\1", cleaned[first: last + 1])
                 return json.loads(candidate)
         except Exception:
             pass
@@ -263,8 +553,7 @@ class MedGemmaService:
     @staticmethod
     def _safe_float(value: Any, default: float = 0.5) -> float:
         try:
-            f = float(value)
-            return max(0.0, min(1.0, f))
+            return max(0.0, min(1.0, float(value)))
         except (TypeError, ValueError):
             return default
 
@@ -276,34 +565,23 @@ class MedGemmaService:
         return "NONE"
 
     # ------------------------------------------------------------------
-    # Fallback responses
+    # Fallback response
     # ------------------------------------------------------------------
 
-    def _unavailable_response(self, filename: str) -> ImagingFindings:
+    def _error_response(self, modality: str, filename: str) -> ImagingFindings:
+        label = MODALITY_LABELS.get(modality, "Medical image")
         return ImagingFindings(
-            modality="chest_xray",
-            findings=["MedGemma imaging analysis is not configured"],
-            abnormalities=[],
-            impression=(
-                "Medical imaging AI is not currently available. "
-                "Configure MEDGEMMA_ENDPOINT and HF_TOKEN to enable chest X-ray analysis."
-            ),
-            confidence=0.0,
-            urgency_hint="NONE",
-            filename=filename,
-        )
-
-    def _error_response(self, filename: str) -> ImagingFindings:
-        return ImagingFindings(
-            modality="chest_xray",
+            modality=modality,
             findings=["Imaging analysis encountered a technical error"],
             abnormalities=[],
             impression=(
-                "Could not complete imaging analysis due to a technical error. "
+                f"Could not complete {label} analysis due to a technical error. "
                 "The clinical conversation can continue based on your described symptoms."
             ),
             confidence=0.0,
             urgency_hint="NONE",
+            recommended_followup=[],
+            clinical_slots={},
             filename=filename,
         )
 

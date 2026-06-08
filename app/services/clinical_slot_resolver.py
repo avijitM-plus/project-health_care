@@ -788,6 +788,42 @@ _SLOT_QUESTION_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Imaging-specific question → reply triggers
+# Used when IMAGING_FOLLOWUP_RULES fires a question that has no SLOT_REGISTRY entry.
+# Each tuple: (regex pattern on question text, list of suggested replies)
+# ---------------------------------------------------------------------------
+_IMAGING_REPLY_TRIGGERS: list[tuple[str, list[str]]] = [
+    # fever presence (yes/no)
+    (r"\bfever\b",                              ["Yes, I have a fever", "No fever at all", "Mild warmth — not sure"]),
+    # productive cough / mucus
+    (r"mucus|phlegm|coughing up",               ["Yes, coughing up mucus", "No, cough is dry", "Just a small amount"]),
+    # breathlessness / SOB
+    (r"short.{0,10}breath|breathless|difficulty breath", ["Yes, quite breathless", "Slightly breathless", "Breathing is fine"]),
+    # leg / ankle swelling
+    (r"legs|ankle.*swell|swelling.*ankle|leg.*swell",    ["Yes, both legs swollen", "One leg only", "No leg swelling"]),
+    # orthopnoea (lying flat)
+    (r"lying flat|lie flat|flat at night|breathless.*lying",  ["Yes, can't breathe lying flat", "A little worse lying down", "Same in any position"]),
+    # palpitations
+    (r"palpitation|irregular heartbeat|heart.*beat|irregular.*heart", ["Yes, I feel palpitations", "Occasional skipped beats", "No, heartbeat is normal"]),
+    # sudden chest pain onset
+    (r"sudden.*chest pain|chest pain.*sudden|come on sudden", ["Yes, very sudden onset", "Gradually worsened", "Not sure about onset"]),
+    # haemoptysis
+    (r"blood.*cough|cough.*blood|haemoptysis|hemoptysis",    ["No blood in cough", "Small blood streaks", "Yes, notable blood"]),
+    # weight loss
+    (r"weight loss|losing weight|lost weight",               ["Yes, significant loss", "Minor — around 2 kg", "No weight change noticed"]),
+    # skin lesion duration / change
+    (r"how long.*lesion|lesion.*how long|duration.*lesion",  ["Just noticed today", "About a week", "Months or longer"]),
+    (r"changed|growing|change.*size|change.*colou?r",        ["Yes, changed recently", "Slightly changed", "Seems unchanged to me"]),
+    # wound duration
+    (r"how long.*wound|wound.*how long|wound.*ago",          ["Just now / today", "A few days ago", "Over a week ago"]),
+    # tetanus / vaccination
+    (r"tetanus|vaccin",                                      ["Vaccinated recently", "Not sure — years ago", "Never vaccinated / don't know"]),
+    # wound pain
+    (r"pain.*wound|wound.*pain|hurt.*wound",                 ["Very painful", "Mild pain around it", "No pain"]),
+]
+
+
 class ClinicalSlotResolver:
     """
     Semantic state layer: converts natural language → canonical clinical slots.
@@ -944,6 +980,65 @@ class ClinicalSlotResolver:
                     f"SlotResolver: suggested replies for slot '{node['slot']}': {replies}"
                 )
                 return replies
+        return []
+
+    # ------------------------------------------------------------------
+    # 4b. Question-aligned suggested reply generation
+    # ------------------------------------------------------------------
+
+    def get_replies_for_question(
+        self, question: str, clinical_slots: dict | None = None
+    ) -> list[str]:
+        """
+        Return suggested replies that directly answer the given follow-up question.
+
+        Strategy:
+          1. Match question text against _SLOT_QUESTION_KEYWORDS to identify the
+             clinical slot this question targets, then return that slot's SLOT_REGISTRY
+             replies (3 max, already authored for each slot).
+          2. If no slot matched, try _IMAGING_REPLY_TRIGGERS — pattern-based replies
+             for imaging-driven questions that don't map to SLOT_REGISTRY.
+
+        Args:
+            question:       The follow-up question text just sent to the patient.
+            clinical_slots: Current clinical slots (used to skip already-filled slots).
+
+        Returns:
+            Up to 3 short reply strings, or [] if no match found.
+        """
+        import re as _re
+        q_lower = question.lower()
+        clinical_slots = clinical_slots or {}
+
+        # ── Layer 1: SLOT_REGISTRY match via _SLOT_QUESTION_KEYWORDS ──────────
+        best_slot: str | None = None
+        best_score: int = 0
+        for slot_name, keywords in _SLOT_QUESTION_KEYWORDS.items():
+            # Skip slots that are already filled (won't be asked about)
+            if self.is_slot_filled(slot_name, clinical_slots):
+                continue
+            score = sum(1 for kw in keywords if kw.lower() in q_lower)
+            if score > best_score:
+                best_score = score
+                best_slot = slot_name
+
+        if best_slot and best_score > 0:
+            entry = SLOT_REGISTRY.get(best_slot)
+            if entry and entry.get("suggested_replies"):
+                replies = entry["suggested_replies"][:3]
+                logger.debug(
+                    f"SlotResolver: question-aligned replies via slot '{best_slot}': {replies}"
+                )
+                return replies
+
+        # ── Layer 2: Imaging / presence question pattern match ────────────────
+        for pattern, replies in _IMAGING_REPLY_TRIGGERS:
+            if _re.search(pattern, q_lower, _re.IGNORECASE):
+                logger.debug(
+                    f"SlotResolver: imaging-trigger replies for pattern '{pattern}': {replies}"
+                )
+                return replies
+
         return []
 
     # ------------------------------------------------------------------

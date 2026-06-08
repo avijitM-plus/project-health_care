@@ -246,29 +246,62 @@ class LLMService:
         imaging: ImagingFindings,
         memory_summary: str = "",
     ) -> dict:
-        """Generate an imaging-aware clinical response via Groq after X-ray analysis."""
-        findings_text = "\n".join(f"  - {f}" for f in imaging.findings) or "  - No specific findings noted"
+        """Generate an imaging-aware clinical response via Groq after MedGemma analysis."""
+        from app.services.medgemma_service import MODALITY_LABELS
+
+        modality_label = MODALITY_LABELS.get(imaging.modality, "Medical Image")
+
+        findings_text = (
+            "\n".join(f"  - {f}" for f in imaging.findings)
+            or "  - No specific findings noted"
+        )
         abnormalities_text = (
             "\n".join(f"  - {a}" for a in imaging.abnormalities)
             if imaging.abnormalities
             else "  - None detected"
         )
+        followup_hint = ""
+        if imaging.recommended_followup:
+            followup_hint = (
+                "\nMedGemma recommended follow-up questions (use these as a starting point):\n"
+                + "\n".join(f"  - {q}" for q in imaging.recommended_followup)
+            )
+
+        clinical_slots_hint = ""
+        if imaging.clinical_slots:
+            active = {k: v for k, v in imaging.clinical_slots.items() if v}
+            if active:
+                import json as _json
+                clinical_slots_hint = (
+                    f"\nMedGemma detected clinical slots: {_json.dumps(active)}"
+                )
 
         user_prompt = (
-            f"IMAGING EVENT: Chest X-ray uploaded and analyzed by MedGemma AI.\n\n"
+            f"IMAGING EVENT: {modality_label} uploaded and analyzed by MedGemma AI.\n\n"
             f"MEDGEMMA ANALYSIS RESULTS:\n"
             f"  Filename: {imaging.filename}\n"
-            f"  Modality: Chest X-Ray\n"
+            f"  Modality: {modality_label}\n"
             f"  Findings:\n{findings_text}\n"
             f"  Abnormalities detected:\n{abnormalities_text}\n"
             f"  Clinical impression: {imaging.impression}\n"
             f"  Analysis confidence: {imaging.confidence:.0%}\n"
-            f"  Suggested urgency: {imaging.urgency_hint}\n\n"
+            f"  Suggested urgency: {imaging.urgency_hint}"
+            f"{clinical_slots_hint}"
+            f"{followup_hint}\n\n"
             f"CURRENT CLINICAL CONTEXT:\n{memory_summary}\n\n"
-            "Generate a clinical conversational response that acknowledges the X-ray, explains "
-            "the key findings in lay terms, and asks 1-2 targeted follow-up questions directly "
-            "relevant to the imaging findings. Follow the standard JSON output contract."
+            f"Generate a clinical conversational response that:\n"
+            f"1. Acknowledges the {modality_label} analysis\n"
+            f"2. Explains key findings in plain lay language\n"
+            f"3. Asks 1-2 targeted follow-up questions relevant to the imaging findings\n"
+            f"   (prefer the MedGemma recommended follow-up questions above if applicable)\n"
+            f"4. Does NOT recommend another {modality_label} — it was just performed\n"
+            f"Follow the standard JSON output contract."
         )
+
+        fallback_followups = imaging.recommended_followup[:2] if imaging.recommended_followup else [
+            "Are you currently experiencing any difficulty breathing or shortness of breath?",
+            "Do you have a fever or productive cough?",
+        ]
 
         return self._call_groq(
             system_prompt=IMAGING_RESPONSE_SYSTEM_PROMPT,
@@ -277,23 +310,20 @@ class LLMService:
             temperature=0.3,
             fallback={
                 "reply": (
-                    f"I've reviewed the chest X-ray you uploaded ({imaging.filename}). "
+                    f"I've reviewed the {modality_label} you uploaded ({imaging.filename}). "
                     f"{imaging.impression} "
-                    "Please note this analysis requires review by a qualified radiologist. "
-                    "Are you currently experiencing any breathing difficulty or chest discomfort?"
+                    "Please note this analysis requires review by a qualified healthcare professional. "
+                    "I have a couple of follow-up questions based on the findings."
                 ),
                 "possible_diseases": [],
                 "urgency": imaging.urgency_hint if imaging.urgency_hint != "NONE" else "LOW",
-                "followup_questions": [
-                    "Are you currently experiencing any difficulty breathing or shortness of breath?",
-                    "Do you have a fever or productive cough?",
-                ],
+                "followup_questions": fallback_followups,
                 "suggested_replies": ["Yes, I have those symptoms", "No, I feel okay", "I'm not sure"],
                 "stage": 3,
-                "advice": "Please consult a doctor and share this X-ray with a radiologist for formal interpretation.",
+                "advice": f"Please consult a doctor and share this {modality_label} with a specialist for formal interpretation.",
                 "disclaimer": (
                     "This is AI-generated guidance and not a medical diagnosis. "
-                    "Imaging analysis requires radiologist interpretation. "
+                    "Imaging analysis requires professional interpretation. "
                     "Consult a licensed doctor for professional medical advice."
                 ),
             },

@@ -387,6 +387,14 @@ class MemoryService:
         state = self.load(session_id)
         state.trend_summary = trend_summary
 
+    def update_cached_tests(
+        self, session_id: str, tests: list[dict], cache_key: str
+    ) -> None:
+        """Store test recommendations and the state key they were computed for."""
+        state = self.load(session_id)
+        state.cached_tests = tests
+        state.tests_cache_key = cache_key
+
     def add_imaging_study(self, session_id: str, findings: ImagingFindings) -> None:
         """Persist imaging findings into the session's imaging history."""
         state = self.load(session_id)

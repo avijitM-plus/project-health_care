@@ -19,6 +19,8 @@ class ImagingFindings(BaseModel):
     urgency_hint: str = "NONE"
     filename: str = ""
     uploaded_at: float = Field(default_factory=time.time)
+    recommended_followup: List[str] = []   # MedGemma-suggested follow-up questions
+    clinical_slots: dict = {}              # MedGemma-extracted boolean slot findings
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +79,9 @@ class ConversationState(BaseModel):
     turn_count: int = 0
     created_at: float = Field(default_factory=time.time)
     last_active: float = Field(default_factory=time.time)
+    # Test-engine result cache — avoids redundant LLM calls when clinical state is unchanged
+    cached_tests: list[dict] = []
+    tests_cache_key: str = ""
 
 
 # ---------------------------------------------------------------------------

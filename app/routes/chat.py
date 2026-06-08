@@ -1,4 +1,34 @@
+"""
+Chat endpoint — POST /chat
+
+Pipeline (one Groq call per turn whenever possible):
+
+  [memory load]                          ~1ms
+  [demographics update]                  ~0ms
+  [slot resolution  — regex, no LLM]    ~1ms
+  [symptom extract  — Python, no LLM]   ~2ms
+  [state merge]                          ~1ms
+  [predictor        — sklearn RF]        ~5ms
+  [emergency detect — rules]             ~1ms
+  [followup engine  — rules]             ~1ms
+  [context build]                        ~2ms
+  ┌─────────────────────────────────┐
+  │ Groq chat call      ~2-8s       │  (always)
+  │ Test engine LLM     ~2-6s       │  (parallel; skipped on cache hit)
+  └─────────────────────────────────┘
+  [state machine update]                 ~1ms
+  [suggested reply alignment]            ~1ms
+
+Total LLM roundtrips:
+  cache hit  → 1 Groq call  (chat only)
+  cache miss → 1 Groq call  (chat + test engine in parallel = 1 roundtrip)
+"""
+import hashlib
+import json
 import logging
+import time
+import concurrent.futures
+
 from fastapi import APIRouter
 from app.models.schemas import ChatRequest, ChatResponse, SymptomRecord
 from app.services.symptom_extractor import state_extractor
@@ -11,27 +41,51 @@ from app.services.advice_engine import advice_engine
 from app.services.test_engine import test_engine
 from app.services.followup_engine import followup_engine
 from app.services.clinical_slot_resolver import clinical_slot_resolver
-import concurrent.futures
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _tick(session_id: str, label: str, t0: float) -> float:
+    """Log elapsed ms since t0, return current time for chaining."""
+    elapsed = (time.perf_counter() - t0) * 1000
+    logger.info(f"[PERF][{session_id}] {label}: {elapsed:.1f}ms")
+    return time.perf_counter()
+
+
+def _compute_tests_cache_key(
+    symptoms: list[str], predictions: list[dict], urgency: str
+) -> str:
+    """Stable hash of the inputs that drive test recommendations."""
+    data = {
+        "s": sorted(symptoms),
+        "d": sorted(d.get("name", "") for d in predictions),
+        "u": urgency,
+    }
+    return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     user_msg = request.message
     session_id = request.conversation_id
+    turn_start = time.perf_counter()
 
-    # ------------------------------------------------------------------
-    # 1. Load / create session
-    # ------------------------------------------------------------------
+    # ── 1. Memory: load / create session ────────────────────────────────────
+    t = time.perf_counter()
     state = memory_service.load(session_id)
     turn = memory_service.increment_turn(session_id)
+    t = _tick(session_id, "memory_load", t)
 
-    # ------------------------------------------------------------------
-    # 2. Persist patient demographics (only updates non-None values)
-    # ------------------------------------------------------------------
+    # ── 2. Demographics ──────────────────────────────────────────────────────
     memory_service.update_metadata(
         session_id,
         age=request.age,
@@ -39,50 +93,59 @@ async def chat_endpoint(request: ChatRequest):
         chronic_conditions=request.chronic_conditions,
     )
 
-    # ------------------------------------------------------------------
-    # 3. Extract Structured Clinical State (V4)
-    # ------------------------------------------------------------------
-    pending_qs = memory_service.get_pending_questions(session_id)
+    # ── 3. Pure-Python clinical state extraction (no LLM) ───────────────────
+    #
+    # Replaces the previous state_extractor.extract_state() Groq call.
+    # Two fast sub-steps run in pure Python:
+    #
+    #   3a. Regex slot resolver — extracts structured clinical slots
+    #       (e.g., "dry cough" → cough_type: dry, "101°F" → fever_temperature: 101°F)
+    #
+    #   3b. Synonym map + keyword scan — detects Kaggle symptom names
+    #       (e.g., "tired" → fatigue, "stomach ache" → stomach_pain)
+    #
+    # Question resolution (which pending questions this message answers) is handled
+    # by the main Groq chat response's `resolved_questions` field.
+    # ────────────────────────────────────────────────────────────────────────
+    t = time.perf_counter()
     current_slots = state.clinical_slots
-    
-    extraction = state_extractor.extract_state(user_msg, current_slots, pending_qs)
-    
-    # ------------------------------------------------------------------
-    # 3b. Deterministic slot pre-resolution from patient text
-    # ------------------------------------------------------------------
-    # Run regex patterns against raw text BEFORE LLM — fills slots the
-    # LLM might key differently (e.g. "nothing comes out" → cough_type=dry).
+    pending_qs = memory_service.get_pending_questions(session_id)
+
+    # 3a. Regex deterministic slot extraction
     deterministic_slots = clinical_slot_resolver.resolve_from_text(user_msg, current_slots)
 
-    # ------------------------------------------------------------------
-    # 4. Merge state and symptoms
-    # ------------------------------------------------------------------
-    # Normalize LLM slot key variations → canonical NBQ slot names
-    normalized_llm_slots = clinical_slot_resolver.normalize_slot_names(extraction.mutated_slots)
-    merged_slots = {**deterministic_slots, **normalized_llm_slots}
-    memory_service.update_slots(session_id, merged_slots)
-    
-    # Create SymptomRecords for the base symptoms to maintain compatibility with predictor
-    new_records = [SymptomRecord(name=sym, base_name=sym) for sym in extraction.normalized_symptoms]
+    # 3b. Fast Python symptom extraction (synonym map + keyword scan)
+    extracted_symptoms = state_extractor.extract_symptoms_fast(user_msg)
+
+    t = _tick(session_id, "slot_resolution+symptom_extract", t)
+
+    # ── 4. Merge state ───────────────────────────────────────────────────────
+    normalized_llm_slots = clinical_slot_resolver.normalize_slot_names(deterministic_slots)
+    memory_service.update_slots(session_id, normalized_llm_slots)
+
+    new_records = [SymptomRecord(name=sym, base_name=sym) for sym in extracted_symptoms]
     memory_service.merge_symptoms(session_id, new_records, turn_number=turn)
-    
+
     all_symptom_names = memory_service.get_symptom_names(session_id)
     base_symptom_names = memory_service.get_base_symptom_names(session_id)
 
-    # Fallbacks for backwards compatibility in logging/prompts
-    severity = str(extraction.mutated_slots.get("severity", "UNKNOWN"))
-    duration = str(extraction.mutated_slots.get("duration", "None"))
+    # Derive severity / duration from deterministic slots or existing session state
+    severity = str(
+        deterministic_slots.get("severity", state.clinical_slots.get("severity", "UNKNOWN"))
+    )
+    duration = str(
+        deterministic_slots.get("duration", state.clinical_slots.get("duration", "None"))
+    )
 
     logger.info(
         f"[{session_id}] Turn {turn}: "
-        f"slots_mutated={len(extraction.mutated_slots)}, "
-        f"accumulated={len(all_symptom_names)}, "
-        f"severity={severity}, duration={duration}"
+        f"det_slots={list(deterministic_slots.keys())}, "
+        f"new_symptoms={extracted_symptoms}, "
+        f"accumulated={len(all_symptom_names)}"
     )
 
-    # ------------------------------------------------------------------
-    # 5. Predict disease — with Gender-Aware Filtering
-    # ------------------------------------------------------------------
+    # ── 5. Disease prediction ────────────────────────────────────────────────
+    t = time.perf_counter()
     predictor_available = True
     try:
         patient_gender = state.metadata.gender or state.clinical_slots.get("gender")
@@ -94,35 +157,21 @@ async def chat_endpoint(request: ChatRequest):
         logger.error(f"[{session_id}] Predictor failed: {e}")
         predicted = []
         predictor_available = False
-
-    # Store latest predictions in session
     memory_service.update_predictions(session_id, predicted)
+    t = _tick(session_id, "predictor", t)
 
-    # ------------------------------------------------------------------
-    # 6. Emergency engine — urgency ESCALATION only
-    # ------------------------------------------------------------------
-    raw_urgency = emergency_engine.check_urgency(
-        base_symptom_names, user_text=user_msg
-    )
+    # ── 6. Emergency detection (rule-based, no LLM) ──────────────────────────
+    t = time.perf_counter()
+    raw_urgency = emergency_engine.check_urgency(base_symptom_names, user_text=user_msg)
     urgency = memory_service.escalate_urgency(session_id, raw_urgency)
-
-    # ------------------------------------------------------------------
-    # 6.5. Red Flag Engine — DETERMINISTIC OVERRIDE
-    # ------------------------------------------------------------------
-    is_critical, detected_flags = red_flag_engine.check_red_flags(
-        all_symptom_names, user_msg
-    )
+    is_critical, detected_flags = red_flag_engine.check_red_flags(all_symptom_names, user_msg)
     if is_critical:
         urgency = memory_service.escalate_urgency(session_id, "EMERGENCY")
+    t = _tick(session_id, "emergency_detection", t)
 
-
-    # ------------------------------------------------------------------
-    # 7. Slot-aware follow-up candidates (feed as hint to LLM)
-    # ------------------------------------------------------------------
-    # The followup_engine filters against already-filled clinical slots and
-    # answered question text, producing a set of candidate questions.
-    # These are injected into the prompt context so the LLM uses them as
-    # a slot-filtered starting point — preventing it from re-asking covered topics.
+    # ── 7. Follow-up engine + advice (rule-based, no LLM) ────────────────────
+    t = time.perf_counter()
+    state = memory_service.load(session_id)  # reload after slot mutations
     answered_qs = state.answered_questions
     asked_qs = state.asked_questions
     followups = followup_engine.generate_questions(
@@ -132,30 +181,36 @@ async def chat_endpoint(request: ChatRequest):
         answered_questions=answered_qs,
         asked_questions=asked_qs,
     )
-    # ------------------------------------------------------------------
-    # 8. Safe advice (uses base names + peak urgency)
-    # ------------------------------------------------------------------
     safe_advice = advice_engine.generate_advice(base_symptom_names, urgency)
+    t = _tick(session_id, "followup_engine+advice", t)
 
-    # ------------------------------------------------------------------
-    # 9. Build rich prompt context & run LLMs concurrently
-    # ------------------------------------------------------------------
+    # ── 8. Build rich prompt context ─────────────────────────────────────────
+    t = time.perf_counter()
     prompt_context = memory_service.get_prompt_context(session_id)
-
-    # Append slot-aware candidate questions as a hint for the LLM
     if followups:
-        candidates_hint = (
+        prompt_context += (
             "\nSLOT-AWARE CANDIDATE QUESTIONS (pre-filtered: only unfilled slots) — "
             "use as a starting point or ask something better:\n"
             + "\n".join(f"  - {q}" for q in followups)
         )
-        prompt_context = prompt_context + candidates_hint
+    t = _tick(session_id, "context_build", t)
 
+    # ── 9. Groq chat call + test engine (parallel, test engine cached) ────────
+    #
+    # Test engine cache:
+    #   Key = hash(sorted symptoms, sorted disease names, urgency)
+    #   On cache HIT  → skip LLM #3 entirely  → 1 Groq call total
+    #   On cache MISS → chat + test engine run in parallel → 1 roundtrip
+    # ────────────────────────────────────────────────────────────────────────
+    t = time.perf_counter()
     meta = state.metadata
-    
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        chat_future = executor.submit(
-            llm_service.generate_chat_response,
+    tests_cache_key = _compute_tests_cache_key(base_symptom_names, predicted, urgency)
+    cache_hit = state.tests_cache_key == tests_cache_key and bool(state.cached_tests)
+
+    if cache_hit:
+        logger.info(f"[PERF][{session_id}] test_engine: CACHE_HIT — skipping LLM call")
+        # Only the chat call runs — single Groq roundtrip
+        llm_output = llm_service.generate_chat_response(
             user_message=user_msg,
             extracted_symptoms=all_symptom_names,
             predicted_diseases=predicted,
@@ -169,54 +224,70 @@ async def chat_endpoint(request: ChatRequest):
             memory_summary=prompt_context,
             emergency_override=is_critical,
         )
-        
-        test_engine_future = executor.submit(
-            test_engine.recommend_tests,
-            symptoms=all_symptom_names,
-            clinical_slots=state.clinical_slots,
-            predicted_diseases=predicted,
-            reports=state.reports,
-            urgency=urgency
-        )
-        
-        llm_output = chat_future.result()
-        recommended_tests = test_engine_future.result()
+        recommended_tests = state.cached_tests
+        t = _tick(session_id, "groq_chat [1 LLM call — test cached]", t)
+    else:
+        # Chat + test engine run in parallel — still only 1 roundtrip wall-clock time
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            chat_future = executor.submit(
+                llm_service.generate_chat_response,
+                user_message=user_msg,
+                extracted_symptoms=all_symptom_names,
+                predicted_diseases=predicted,
+                urgency=urgency,
+                followup_questions=followups,
+                severity=severity,
+                duration=duration,
+                age=meta.age,
+                gender=meta.gender,
+                chronic_conditions=meta.chronic_conditions,
+                memory_summary=prompt_context,
+                emergency_override=is_critical,
+            )
+            test_future = executor.submit(
+                test_engine.recommend_tests,
+                symptoms=all_symptom_names,
+                clinical_slots=state.clinical_slots,
+                predicted_diseases=predicted,
+                reports=state.reports,
+                urgency=urgency,
+                imaging_studies=state.imaging_studies,
+                user_message=user_msg,
+            )
+            llm_output = chat_future.result()
+            recommended_tests = test_future.result()
 
-    # ------------------------------------------------------------------
-    # 10. Merge safe advice into response
-    # ------------------------------------------------------------------
-    if safe_advice and (
-        not llm_output.get("advice") or len(llm_output.get("advice", "")) < 20
-    ):
+        memory_service.update_cached_tests(session_id, recommended_tests, tests_cache_key)
+        t = _tick(session_id, "groq_chat+test_engine [2 LLM calls parallel]", t)
+
+    # ── 10. Merge safe advice ────────────────────────────────────────────────
+    if safe_advice and len(llm_output.get("advice", "")) < 20:
         llm_output["advice"] = " | ".join(safe_advice)
 
-    # ------------------------------------------------------------------
-    # 11. Record turn in conversation history
-    # ------------------------------------------------------------------
+    # ── 11. Record turn in conversation history ───────────────────────────────
     memory_service.add_history(session_id, "user", user_msg)
-    memory_service.add_history(
-        session_id, "assistant", llm_output.get("reply", "")
-    )
+    memory_service.add_history(session_id, "assistant", llm_output.get("reply", ""))
 
-    # ------------------------------------------------------------------
-    # 12. Update V3/V4 State Machine
-    # ------------------------------------------------------------------
+    # ── 12. State machine: resolve questions + update stage ───────────────────
+    #
+    # resolved_questions comes from:
+    #   a. Groq chat response (semantic resolution — "it's dry" → resolves dry/wet cough q)
+    #   b. Deterministic slot fills — any slot filled by regex counts as resolved
+    # ────────────────────────────────────────────────────────────────────────
+    t = time.perf_counter()
     llm_resolved = llm_output.get("resolved_questions", [])
-    all_resolved = list(set(llm_resolved + extraction.resolved_questions))
 
-    # Mark deterministically resolved slots as answered too — any question
-    # whose slot was just filled by pattern-matching is now resolved.
+    refreshed_slots = memory_service.load(session_id).clinical_slots
+    det_resolved: list[str] = []
     if deterministic_slots:
         det_resolved = clinical_slot_resolver.get_resolved_slots(
-            base_symptom_names, state.clinical_slots
+            base_symptom_names, refreshed_slots
         )
-        all_resolved = list(set(all_resolved + det_resolved))
-
+    all_resolved = list(set(llm_resolved + det_resolved))
     if all_resolved:
         memory_service.add_answered_questions(session_id, all_resolved)
 
     # Post-filter LLM followup_questions: remove any whose slot is now filled
-    refreshed_slots = memory_service.load(session_id).clinical_slots
     raw_followups = llm_output.get("followup_questions", [])
     final_followups = clinical_slot_resolver.filter_questions_by_slots(
         raw_followups, refreshed_slots
@@ -228,41 +299,65 @@ async def chat_endpoint(request: ChatRequest):
         )
     llm_output["followup_questions"] = final_followups
 
-    # Override suggested_replies with slot-targeted replies when LLM's are empty or generic
-    slot_replies = clinical_slot_resolver.get_slot_targeted_suggested_replies(
-        base_symptom_names, refreshed_slots
-    )
-    if slot_replies and not llm_output.get("suggested_replies"):
-        llm_output["suggested_replies"] = slot_replies
-
-    # Persist the final questions we are actually sending to the user
+    # Persist questions actually sent to the user
     if final_followups:
         memory_service.add_asked_questions(session_id, final_followups)
 
-    # Update state with the newly determined stage
     new_stage = llm_output.get("stage", state.stage)
     memory_service.update_stage(session_id, new_stage)
+    t = _tick(session_id, "state_machine_update", t)
 
-    # ------------------------------------------------------------------
-    # 13. Enrich response with V2/V3/V4 conversational triage fields
-    # ------------------------------------------------------------------
+    # ── 13. Suggested reply alignment ─────────────────────────────────────────
+    #
+    # Priority:
+    #   1. Replies matched to the FIRST follow-up question just sent
+    #      (slot keyword → SLOT_REGISTRY replies  OR  imaging pattern triggers)
+    #   2. Replies from the LLM output (if it produced good ones)
+    #   3. Highest-priority unresolved slot replies (existing fallback)
+    # ────────────────────────────────────────────────────────────────────────
+    t = time.perf_counter()
+    if final_followups:
+        # Align to the first (most important) question
+        aligned_replies = clinical_slot_resolver.get_replies_for_question(
+            final_followups[0], refreshed_slots
+        )
+        if aligned_replies:
+            # Question-aligned replies override everything
+            llm_output["suggested_replies"] = aligned_replies
+        elif llm_output.get("suggested_replies"):
+            # Keep LLM's replies — they may already be relevant
+            pass
+        else:
+            # Last resort: highest-priority unresolved slot replies
+            slot_replies = clinical_slot_resolver.get_slot_targeted_suggested_replies(
+                base_symptom_names, refreshed_slots
+            )
+            if slot_replies:
+                llm_output["suggested_replies"] = slot_replies
+    else:
+        # No follow-up questions — ensure suggested_replies is present
+        if not llm_output.get("suggested_replies"):
+            llm_output["suggested_replies"] = []
+
+    t = _tick(session_id, "reply_alignment", t)
+
+    # ── 14. Enrich response payload ──────────────────────────────────────────
     llm_output["accumulated_symptoms"] = all_symptom_names
     llm_output["predictor_available"] = predictor_available
     llm_output["turn_number"] = turn
-    llm_output["clinical_slots"] = state.clinical_slots
+    llm_output["clinical_slots"] = refreshed_slots
     llm_output["stage"] = new_stage
     llm_output["suggested_replies"] = llm_output.get("suggested_replies", [])
-    
-    # Ensure resolved_questions is present
     llm_output["resolved_questions"] = all_resolved
     llm_output["recommended_tests"] = recommended_tests
     llm_output["reports"] = state.reports
 
+    total_ms = (time.perf_counter() - turn_start) * 1000
     logger.info(
-        f"[{session_id}] Response generated. "
-        f"Turn={turn}, urgency={urgency}, "
-        f"diseases={len(predicted)}, "
-        f"accumulated_symptoms={len(all_symptom_names)}"
+        f"[PERF][{session_id}] TOTAL_TURN: {total_ms:.1f}ms | "
+        f"turn={turn}, urgency={urgency}, "
+        f"diseases={len(predicted)}, symptoms={len(all_symptom_names)}, "
+        f"test_cache={'HIT' if cache_hit else 'MISS'}"
     )
 
     return ChatResponse(**llm_output)

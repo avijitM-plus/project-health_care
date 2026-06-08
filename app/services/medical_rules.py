@@ -162,6 +162,76 @@ EMERGENCY_TRIGGERS = [
     ["sudden_onset_of_paralysis"],
 ]
 
+# ---------------------------------------------------------------------------
+# Imaging-aware follow-up rules
+# When a slot from MedGemma analysis is detected in clinical_slots,
+# these questions are injected into the follow-up engine output.
+# Slot names must match keys produced by MedGemmaService.derive_clinical_slots().
+# ---------------------------------------------------------------------------
+IMAGING_FOLLOWUP_RULES: dict[str, list[dict]] = {
+    # ── Chest / Pulmonary ───────────────────────────────────────────────────
+    "possible_pneumonia": [
+        {"slot": "fever_present",   "priority": 10, "question": "Do you currently have a fever?"},
+        {"slot": "cough_type",      "priority": 9,  "question": "Are you coughing up any mucus or phlegm?"},
+        {"slot": "sob_triggers",    "priority": 8,  "question": "Are you experiencing any shortness of breath?"},
+    ],
+    "lung_opacity": [
+        {"slot": "fever_present",         "priority": 10, "question": "Do you have a fever?"},
+        {"slot": "cough_type",            "priority": 9,  "question": "Do you have a cough, and is it producing anything?"},
+        {"slot": "chest_pain_duration",   "priority": 8,  "question": "Do you have any chest pain or discomfort?"},
+    ],
+    "lung_consolidation": [
+        {"slot": "fever_present",         "priority": 10, "question": "Do you have a fever?"},
+        {"slot": "cough_sputum_blood",    "priority": 9,  "question": "Is there any blood in your cough?"},
+        {"slot": "sob_triggers",          "priority": 8,  "question": "Are you short of breath?"},
+    ],
+    "pleural_effusion_possible": [
+        {"slot": "sob_triggers",          "priority": 10, "question": "Are you short of breath, even when lying down or at rest?"},
+        {"slot": "swelling_location",     "priority": 8,  "question": "Do you have any swelling in your legs or ankles?"},
+        {"slot": "chest_pain_duration",   "priority": 7,  "question": "Do you have any chest pain or heaviness?"},
+    ],
+    "cardiomegaly_possible": [
+        {"slot": "sob_triggers",          "priority": 10, "question": "Do you feel breathless when lying flat at night?"},
+        {"slot": "swelling_location",     "priority": 9,  "question": "Do you have swelling in your legs or ankles?"},
+        {"slot": "sob_associated_symptoms","priority": 8, "question": "Do you notice any irregular heartbeat or palpitations?"},
+    ],
+    "pneumothorax_possible": [
+        {"slot": "chest_pain_duration",   "priority": 10, "question": "Did your chest pain come on suddenly?"},
+        {"slot": "sob_triggers",          "priority": 9,  "question": "Are you having difficulty breathing right now?"},
+    ],
+    "pulmonary_edema_possible": [
+        {"slot": "sob_triggers",          "priority": 10, "question": "Are you very short of breath, especially lying flat?"},
+        {"slot": "swelling_location",     "priority": 9,  "question": "Do you have leg or ankle swelling?"},
+    ],
+    "lung_mass_possible": [
+        {"slot": "weight_loss_appetite",  "priority": 10, "question": "Have you noticed any unexplained weight loss recently?"},
+        {"slot": "cough_sputum_blood",    "priority": 9,  "question": "Have you ever coughed up blood?"},
+        {"slot": "sob_triggers",          "priority": 8,  "question": "Are you experiencing any shortness of breath?"},
+    ],
+    # ── Skin ────────────────────────────────────────────────────────────────
+    "possible_melanoma": [
+        {"slot": "rash_duration",   "priority": 10, "question": "How long have you had this skin lesion, and has it changed recently?"},
+        {"slot": "rash_type",       "priority": 9,  "question": "Is the lesion itchy, bleeding, or crusting?"},
+    ],
+    "skin_infection_possible": [
+        {"slot": "fever_present",   "priority": 9,  "question": "Do you have a fever or feel generally unwell?"},
+        {"slot": "rash_duration",   "priority": 8,  "question": "How long has the skin infection been present?"},
+    ],
+    "cellulitis_possible": [
+        {"slot": "fever_present",   "priority": 10, "question": "Do you have a fever?"},
+        {"slot": "swelling_onset",  "priority": 9,  "question": "Did the redness and swelling come on suddenly?"},
+    ],
+    # ── Wound ───────────────────────────────────────────────────────────────
+    "wound_infection_possible": [
+        {"slot": "fever_present",   "priority": 10, "question": "Do you have a fever since the wound appeared?"},
+        {"slot": "rash_duration",   "priority": 9,  "question": "How long ago did you get this wound?"},
+    ],
+    "wound_necrosis": [
+        {"slot": "sob_triggers",    "priority": 10, "question": "Do you have any severe pain around the wound or feel very unwell?"},
+        {"slot": "fever_present",   "priority": 9,  "question": "Do you have a high fever?"},
+    ],
+}
+
 # TASK 6 — Single-keyword emergency phrases for raw-text matching
 # Used by EmergencyEngine.check_text_urgency() for free-text scanning
 EMERGENCY_TEXT_TRIGGERS = [

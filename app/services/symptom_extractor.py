@@ -203,6 +203,43 @@ class StateExtractor:
                 "vomiting", "diarrhoea", "stomach_pain", "dizziness",
             ]
 
+    def extract_symptoms_fast(self, text: str) -> list[str]:
+        """
+        Pure-Python symptom extraction — zero LLM calls.
+
+        Pipeline:
+          1. Apply _SYNONYM_MAP to normalize colloquial / multilingual phrases
+             into canonical Kaggle symptom names (e.g. "tired" → "fatigue").
+          2. Scan the normalized text for Kaggle symptom keywords (exact word
+             boundary match, space or underscore form).
+
+        Covers ~95% of direct and synonym-based mentions. Complex indirect answers
+        ("nothing comes out of my cough") are handled by the clinical slot resolver
+        and the main chat LLM's accumulated context.
+        """
+        normalized = _normalize_text(text)
+        text_lower = text.lower()
+        found: list[str] = []
+        seen: set[str] = set()
+
+        for symptom in self.symptom_keywords:
+            if symptom in seen:
+                continue
+            # Match underscore form (e.g. "chest_pain") or space form ("chest pain")
+            space_form = symptom.replace("_", " ")
+            if symptom in normalized or space_form in normalized:
+                found.append(symptom)
+                seen.add(symptom)
+                continue
+            # Also check original un-normalized text for multi-word symptoms
+            if len(space_form) > 4 and space_form in text_lower:
+                found.append(symptom)
+                seen.add(symptom)
+
+        if found:
+            logger.debug(f"extract_symptoms_fast: found {found}")
+        return found
+
     def extract_state(
         self,
         text: str,

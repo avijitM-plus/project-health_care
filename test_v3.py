@@ -18,7 +18,7 @@ async def test_v3_state_machine():
     async with httpx.AsyncClient() as client:
         print("\n--- TURN 1 ---")
         print(f"User: {req1['message']}")
-        resp1 = await client.post(url, json=req1, timeout=60.0)
+        resp1 = await client.post(url, json=req1, timeout=180.0)
         data1 = resp1.json()
         print(f"AI: {data1.get('reply', '')}")
         print(f"Follow-ups Generated: {data1.get('followup_questions', [])}")
@@ -32,7 +32,8 @@ async def test_v3_state_machine():
         
         print("\n--- TURN 2 ---")
         print(f"User: {req2['message']}")
-        resp2 = await client.post(url, json=req2, timeout=60.0)
+        await asyncio.sleep(35) # Avoid Groq rate limits
+        resp2 = await client.post(url, json=req2, timeout=120.0)
         data2 = resp2.json()
         print(f"AI: {data2.get('reply', '')}")
         print(f"Follow-ups Generated: {data2.get('followup_questions', [])}")
