@@ -195,21 +195,19 @@ button {
     cursor: not-allowed;
 }
 
-/* Mic recording state */
-.mic-button.recording {
-    color: #ef4444;
-    background-color: #fee2e2;
-    animation: mic-pulse 1.5s ease-in-out infinite;
+/* Voice CTA on empty chat */
+.voice-cta {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
 }
 
-.mic-button.recording:hover {
-    background-color: #fecaca;
-    color: #dc2626;
-}
-
-@keyframes mic-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-    50%       { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+.voice-cta-text {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
 /* Typing Indicator Animation */

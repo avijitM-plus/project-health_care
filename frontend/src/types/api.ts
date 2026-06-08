@@ -79,3 +79,61 @@ export interface ReportAnalysisResponse {
         trend_summary?: string;
     };
 }
+
+
+// ── Voice system types ──────────────────────────────────────────────────────
+
+export interface TranscriptionSegment {
+    text: string;
+    start: number;
+    end: number;
+    confidence: number;
+}
+
+export interface TranscriptionResult {
+    transcript: string;
+    language: string;
+    confidence: number;
+    processing_time: number;
+    segments: TranscriptionSegment[];
+    engine: string;
+}
+
+export interface VoiceChatResponse {
+    // STT result
+    transcript: string;
+    language: string;
+    stt_confidence: number;
+    // Clinical engine response
+    ai_response: string;
+    urgency: string;
+    followup_questions: string[];
+    possible_diseases: DiseasePrediction[];
+    suggested_replies: string[];
+    // TTS audio (base64-encoded)
+    audio_base64: string;
+    audio_format: string;
+    // Performance
+    stt_time: number;
+    llm_time: number;
+    tts_time: number;
+    total_time: number;
+}
+
+export interface VoiceInfo {
+    voice_id: string;
+    name: string;
+    gender: string;
+    language: string;
+    engine: string;
+    is_default: boolean;
+}
+
+export interface VoiceHealthResponse {
+    stt_engine: string;
+    stt_ready: boolean;
+    stt_device: string;
+    tts_engine: string;
+    tts_ready: boolean;
+    tts_voices: number;
+}

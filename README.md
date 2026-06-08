@@ -656,6 +656,9 @@ cd ..
 
 ### 4. Install Voice Dependencies *(optional)*
 
+> [!WARNING]
+> **Windows + Python 3.14 Limitation:** Local STT models (`faster-whisper`, `openai-whisper`) depend on `numpy` and `ctranslate2`. Currently, there are no pre-built binary wheels for Python 3.14, and compiling them from source on Windows fails. If you are on Windows, please use **Python 3.11 or 3.12** to fully enable the local Voice STT capabilities. Otherwise, STT will be disabled.
+
 ```bash
 pip install faster-whisper edge-tts
 
@@ -1133,6 +1136,9 @@ flowchart LR
 ```
 
 <br/>
+
+> [!NOTE]
+> **STT Engine Graceful Degradation:** The voice pipeline is designed to be fully modular. If local STT engines (`faster-whisper` or `openai-whisper`) fail to load (e.g., due to Python 3.14 environment constraints), the STT module will gracefully disable itself, returning an informative error (`"STT failed: No STT engine available"`) during voice chat. The TTS module (`edge-tts`) will remain fully functional via the cloud.
 
 ### Available Voices
 

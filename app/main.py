@@ -17,11 +17,12 @@ logger = logging.getLogger(__name__)
 # --- API metadata for auto-generated docs (deliverable #13) ---
 app = FastAPI(
     title="IASIS AI Medical Assistant Server",
-    version="1.0.0",
+    version="2.1.0",
     description=(
         "AI-powered medical assistant backend that chats with patients, "
         "analyzes symptoms, predicts possible diseases using ML, parses "
-        "medical reports (PDF/Image), and flags emergencies. "
+        "medical reports (PDF/Image), provides voice conversations, "
+        "and flags emergencies. "
         "All responses include medical disclaimers."
     ),
     docs_url="/docs",
@@ -31,6 +32,7 @@ app = FastAPI(
         {"name": "Chat", "description": "Conversational symptom triage"},
         {"name": "Reports", "description": "Medical report upload and analysis"},
         {"name": "Session", "description": "Session management and monitoring"},
+        {"name": "Voice", "description": "Voice conversation (STT, TTS, voice chat pipeline)"},
     ],
 )
 
@@ -78,22 +80,36 @@ app.include_router(summary.router, tags=["Session"])
 app.include_router(voice.router, tags=["Voice"])
 
 
-# --- Startup event: log memory configuration ---
+# --- Startup event: log memory configuration & preload voice engines ---
 @app.on_event("startup")
 async def startup_event():
     from app.services.memory_service import memory_service
     stats = memory_service.stats()
     logger.info(
-        f"IASIS AI v2.0 starting — "
+        f"IASIS AI v2.1 starting — "
         f"Memory config: max_sessions={stats['max_sessions']}, "
         f"ttl={stats['ttl_seconds']}s"
     )
-    # Preload faster-whisper model in background so first STT call is instant
+
+    # Preload voice engines in background so first voice call is instant
     import threading
-    from app.services.stt_service import preload_model
-    threading.Thread(target=preload_model, daemon=True).start()
+
+    def _preload_voice():
+        try:
+            from app.voice.stt.engine import stt_engine
+            stt_engine.load()
+        except Exception as exc:
+            logger.warning("Could not preload STT engine: %s", exc)
+
+        try:
+            from app.voice.tts.engine import tts_engine
+            tts_engine.load()
+        except Exception as exc:
+            logger.warning("Could not preload TTS engine: %s", exc)
+
+    threading.Thread(target=_preload_voice, daemon=True).start()
 
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to IASIS AI API v2.0. Check /docs for API documentation."}
+    return {"message": "Welcome to IASIS AI API v2.1. Check /docs for API documentation."}

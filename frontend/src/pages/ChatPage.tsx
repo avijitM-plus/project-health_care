@@ -2,20 +2,66 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 import { ChatMessage } from '../components/ChatMessage';
-import { Send, FileText, RefreshCw, Paperclip, ScanLine, Mic } from 'lucide-react';
+import { VoiceButton } from '../components/VoiceButton';
+import { useVoice } from '../hooks/useVoice';
+import { Send, FileText, RefreshCw, Paperclip, ScanLine } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import type { VoiceChatResponse } from '../types/api';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
     const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy, patientAge, patientGender } = useChat();
     const [inputValue, setInputValue] = useState('');
-    const [isRecording, setIsRecording] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const xrayInputRef = useRef<HTMLInputElement>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
     const navigate = useNavigate();
+
+    // ── Voice system ─────────────────────────────────────────────────────
+    const handleVoiceChatComplete = (response: VoiceChatResponse) => {
+        // Add user message (transcribed speech)
+        addMessage({
+            sender: 'user',
+            text: response.transcript,
+        });
+
+        // Add AI response
+        addMessage({
+            sender: 'ai',
+            text: response.ai_response,
+            responseMetadata: {
+                reply: response.ai_response,
+                urgency: response.urgency,
+                followup_questions: response.followup_questions,
+                possible_diseases: response.possible_diseases,
+                suggested_replies: response.suggested_replies,
+                accumulated_symptoms: [],
+                predictor_available: true,
+                turn_number: 0,
+                clinical_slots: {},
+                stage: 0,
+                advice: '',
+                disclaimer: 'This is AI-generated guidance and not a medical diagnosis.',
+            },
+        });
+    };
+
+    const handleVoiceError = (error: string) => {
+        addMessage({
+            sender: 'ai',
+            text: `Voice error: ${error}. Please try again or type your message.`,
+        });
+    };
+
+    const voice = useVoice({
+        conversationId,
+        silenceThreshold: 15,
+        silenceDuration: 2500,
+        age: patientAge,
+        gender: patientGender,
+        onVoiceChatComplete: handleVoiceChatComplete,
+        onError: handleVoiceError,
+    });
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -67,48 +113,6 @@ export const ChatPage: React.FC = () => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
-        }
-    };
-
-    const handleMicClick = async () => {
-        if (isRecording) {
-            mediaRecorderRef.current?.stop();
-            setIsRecording(false);
-            return;
-        }
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = mediaRecorder;
-            audioChunksRef.current = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) audioChunksRef.current.push(e.data);
-            };
-
-            mediaRecorder.onstop = async () => {
-                stream.getTracks().forEach((t) => t.stop());
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                if (audioBlob.size === 0) return;
-
-                setIsTyping(true);
-                try {
-                    const result = await apiService.speechToText(audioBlob, 'recording.webm');
-                    setInputValue(result.transcribed_text);
-                } catch (err) {
-                    console.error('STT error:', err);
-                    addMessage({ sender: 'ai', text: 'Could not transcribe audio. Please try again or type your message.' });
-                } finally {
-                    setIsTyping(false);
-                }
-            };
-
-            mediaRecorder.start();
-            setIsRecording(true);
-        } catch (err) {
-            console.error('Microphone access error:', err);
-            addMessage({ sender: 'ai', text: 'Microphone access was denied. Please allow microphone access in your browser settings.' });
         }
     };
 
@@ -188,6 +192,8 @@ export const ChatPage: React.FC = () => {
         }
     };
 
+    const isVoiceBusy = voice.state === 'recording' || voice.state === 'processing';
+
     return (
         <div className="chat-page">
             <header className="chat-header glass-panel">
@@ -210,6 +216,19 @@ export const ChatPage: React.FC = () => {
                         <div className="suggestion-chips">
                             <button onClick={() => handleSend("I have a fever and cough")}>"I have a fever and cough"</button>
                             <button onClick={() => handleSend("I'm experiencing severe chest pain")}>"I'm experiencing severe chest pain"</button>
+                        </div>
+                        <div className="voice-cta">
+                            <p className="voice-cta-text">Or speak your symptoms</p>
+                            <VoiceButton
+                                state={voice.state}
+                                volume={voice.volume}
+                                frequencyData={voice.frequencyData}
+                                recordingDuration={voice.recordingDuration}
+                                isSupported={voice.isSupported}
+                                error={voice.error}
+                                onToggleRecording={voice.toggleRecording}
+                                onStopAudio={voice.stopAudio}
+                            />
                         </div>
                     </div>
                 ) : (
@@ -250,7 +269,7 @@ export const ChatPage: React.FC = () => {
                     <button
                         className="upload-inline-button"
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={isTyping}
+                        disabled={isTyping || isVoiceBusy}
                         title="Upload Medical Report (PDF or image)"
                     >
                         <Paperclip size={20} />
@@ -258,31 +277,37 @@ export const ChatPage: React.FC = () => {
                     <button
                         className="upload-inline-button xray-upload-button"
                         onClick={() => xrayInputRef.current?.click()}
-                        disabled={isTyping}
+                        disabled={isTyping || isVoiceBusy}
                         title="Upload Chest X-Ray (JPG/PNG) — analyzed by MedGemma AI"
                     >
                         <ScanLine size={20} />
                     </button>
-                    <button
-                        className={`upload-inline-button mic-button${isRecording ? ' recording' : ''}`}
-                        onClick={handleMicClick}
-                        disabled={isTyping && !isRecording}
-                        title={isRecording ? 'Stop recording' : 'Speak your symptoms (English or Bangla)'}
-                    >
-                        <Mic size={20} />
-                    </button>
+
+                    {/* Voice button — replaces old inline mic */}
+                    <VoiceButton
+                        state={voice.state}
+                        volume={voice.volume}
+                        frequencyData={voice.frequencyData}
+                        recordingDuration={voice.recordingDuration}
+                        isSupported={voice.isSupported}
+                        error={voice.error}
+                        onToggleRecording={voice.toggleRecording}
+                        onStopAudio={voice.stopAudio}
+                        disabled={isTyping}
+                    />
+
                     <textarea
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyPress}
                         placeholder="Describe your symptoms here..."
                         rows={1}
-                        disabled={isTyping}
+                        disabled={isTyping || isVoiceBusy}
                     />
                     <button 
                         className="send-button"
                         onClick={() => handleSend()}
-                        disabled={!inputValue.trim() || isTyping}
+                        disabled={!inputValue.trim() || isTyping || isVoiceBusy}
                     >
                         <Send size={20} />
                     </button>

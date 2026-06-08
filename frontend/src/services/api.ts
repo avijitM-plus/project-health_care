@@ -1,4 +1,14 @@
-import type { ChatRequest, ChatResponse, ReportAnalysisResponse, XRayAnalysisResponse, ClinicalSummary } from '../types/api';
+import type {
+    ChatRequest,
+    ChatResponse,
+    ReportAnalysisResponse,
+    XRayAnalysisResponse,
+    ClinicalSummary,
+    TranscriptionResult,
+    VoiceChatResponse,
+    VoiceInfo,
+    VoiceHealthResponse,
+} from '../types/api';
 
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
@@ -96,36 +106,116 @@ export const apiService = {
         return response.json();
     },
 
+    // ── Voice System ─────────────────────────────────────────────────────────
+
+    /**
+     * Transcribe audio to text using the STT engine.
+     * Calls the new /voice/transcribe endpoint.
+     */
     async speechToText(
         audioBlob: Blob,
         filename: string = 'recording.webm',
-    ): Promise<{ transcribed_text: string; language: string; confidence: number }> {
+    ): Promise<TranscriptionResult> {
         const formData = new FormData();
         formData.append('audio', audioBlob, filename);
 
-        const response = await fetch(`${API_BASE_URL}/speech-to-text`, {
+        const response = await fetch(`${API_BASE_URL}/voice/transcribe`, {
             method: 'POST',
             body: formData,
         });
 
         if (!response.ok) {
-            throw new Error(`Speech-to-text failed: ${response.statusText}`);
+            const detail = await response.text().catch(() => response.statusText);
+            throw new Error(`Speech-to-text failed: ${detail}`);
         }
 
         return response.json();
     },
 
-    async textToSpeech(text: string, voice?: string): Promise<ArrayBuffer> {
-        const response = await fetch(`${API_BASE_URL}/text-to-speech`, {
+    /**
+     * Convert text to speech using the TTS engine.
+     * Returns raw audio bytes (ArrayBuffer).
+     */
+    async textToSpeech(
+        text: string,
+        voiceId?: string,
+        speed: number = 1.0,
+        outputFormat: string = 'mp3',
+    ): Promise<ArrayBuffer> {
+        const response = await fetch(`${API_BASE_URL}/voice/synthesize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, voice }),
+            body: JSON.stringify({
+                text,
+                voice_id: voiceId,
+                speed,
+                output_format: outputFormat,
+            }),
         });
 
         if (!response.ok) {
-            throw new Error(`Text-to-speech failed: ${response.statusText}`);
+            const detail = await response.text().catch(() => response.statusText);
+            throw new Error(`Text-to-speech failed: ${detail}`);
         }
 
         return response.arrayBuffer();
+    },
+
+    /**
+     * Full voice chat pipeline — audio → STT → IASIS → TTS → response.
+     * This is the primary voice conversation endpoint.
+     */
+    async voiceChat(
+        audioBlob: Blob,
+        conversationId: string,
+        options?: {
+            age?: number;
+            gender?: string;
+            voiceId?: string;
+            speed?: number;
+        },
+    ): Promise<VoiceChatResponse> {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('conversation_id', conversationId);
+
+        if (options?.age) formData.append('age', String(options.age));
+        if (options?.gender) formData.append('gender', options.gender);
+        if (options?.voiceId) formData.append('voice_id', options.voiceId);
+        if (options?.speed) formData.append('speed', String(options.speed));
+
+        const response = await fetch(`${API_BASE_URL}/voice/chat`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const detail = await response.text().catch(() => response.statusText);
+            throw new Error(`Voice chat failed: ${detail}`);
+        }
+
+        return response.json();
+    },
+
+    /**
+     * Get available TTS voices.
+     */
+    async getVoices(): Promise<{ voices: VoiceInfo[] }> {
+        const response = await fetch(`${API_BASE_URL}/voice/voices`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch voices: ${response.statusText}`);
+        }
+        return response.json();
+    },
+
+    /**
+     * Voice system health check.
+     */
+    async voiceHealthCheck(): Promise<VoiceHealthResponse> {
+        const response = await fetch(`${API_BASE_URL}/voice/health`);
+        if (!response.ok) {
+            throw new Error(`Voice health check failed: ${response.statusText}`);
+        }
+        return response.json();
     },
 };
