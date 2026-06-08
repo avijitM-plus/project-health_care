@@ -456,6 +456,16 @@ class MemoryService:
             if state.diagnosis_history:
                 state.diagnosis_history[-1]["status"] = status
 
+    def update_language(self, session_id: str, language: str) -> str:
+        """Persist detected language preference for this session."""
+        state = self.load(session_id)
+        state.preferred_language = language
+        return language
+
+    def get_language(self, session_id: str) -> str:
+        """Return the current language preference ('en' | 'bn')."""
+        return self.load(session_id).preferred_language
+
     def update_cached_tests(
         self, session_id: str, tests: list[dict], cache_key: str
     ) -> None:

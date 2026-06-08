@@ -26,6 +26,8 @@ from pydantic import BaseModel
 from app.voice.stt.engine import stt_engine
 from app.voice.tts.engine import tts_engine
 from app.voice.audio_utils.validator import AudioValidationError, validate_audio
+from app.services.language_detector import resolve_language
+from app.services.memory_service import MemoryService
 from app.voice.schemas import (
     TranscriptionResult,
     TranscriptionSegment,
@@ -36,6 +38,12 @@ from app.voice.schemas import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+memory_service = MemoryService()
+
+_VOICE_FOR_LANG: dict[str, str] = {
+    "bn": "bn-BD-NabanitaNeural",
+    "en": "af_heart",
+}
 
 
 # ── Request schemas ───────────────────────────────────────────────────────────
@@ -196,6 +204,13 @@ async def voice_chat(
         conversation_id, transcript, stt_time, stt_result.get("engine"),
     )
 
+    # ── Step 2b: Resolve and persist session language ─────────────────────
+    session_lang = resolve_language(transcript, memory_service.get_language(conversation_id))
+    memory_service.update_language(conversation_id, session_lang)
+    # Use caller-supplied voice_id only if explicitly provided; otherwise
+    # pick the language-appropriate default.
+    effective_voice_id = voice_id if voice_id else _VOICE_FOR_LANG.get(session_lang)
+
     # ── Step 3: Send to IASIS clinical engine ─────────────────────────────
     llm_start = time.perf_counter()
     try:
@@ -217,6 +232,7 @@ async def voice_chat(
             for d in (chat_response.possible_diseases or [])
         ]
         suggested_replies = chat_response.suggested_replies or []
+        response_lang = getattr(chat_response, "preferred_language", session_lang)
     except Exception as exc:
         logger.error("Voice chat LLM error: %s", exc, exc_info=True)
         ai_response_text = "I'm sorry, I encountered an error processing your message. Please try again."
@@ -224,6 +240,7 @@ async def voice_chat(
         followup_questions = []
         possible_diseases = []
         suggested_replies = []
+        response_lang = session_lang
     llm_time = time.perf_counter() - llm_start
 
     # ── Step 4: TTS — convert AI response to speech ───────────────────────
@@ -233,7 +250,7 @@ async def voice_chat(
     try:
         audio_bytes, _ = await tts_engine.synthesize_async(
             text=ai_response_text,
-            voice_id=voice_id,
+            voice_id=effective_voice_id,
             speed=speed,
             output_format="mp3",
         )
@@ -259,6 +276,7 @@ async def voice_chat(
         suggested_replies=suggested_replies,
         audio_base64=audio_base64,
         audio_format=audio_format,
+        preferred_language=response_lang,
         stt_time=round(stt_time, 3),
         llm_time=round(llm_time, 3),
         tts_time=round(tts_time, 3),

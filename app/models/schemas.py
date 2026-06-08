@@ -85,6 +85,8 @@ class ConversationState(BaseModel):
     # Working diagnosis — clinical reasoning layer
     working_diagnosis: dict | None = None
     diagnosis_history: list[dict] = []
+    # Language preference — persists across turns ("en" | "bn")
+    preferred_language: str = "en"
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +138,7 @@ class ChatResponse(BaseModel):
     working_diagnosis: Optional[dict] = None
     action_plan: Optional[dict] = None
     clinical_stage: str = "information_gathering"
+    preferred_language: str = "en"
 
 class HealthResponse(BaseModel):
     status: str

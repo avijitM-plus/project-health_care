@@ -12,6 +12,7 @@ import './ChatPage.css';
 export const ChatPage: React.FC = () => {
     const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy, patientAge, patientGender } = useChat();
     const [inputValue, setInputValue] = useState('');
+    const [preferredLanguage, setPreferredLanguage] = useState<string>('en');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const xrayInputRef = useRef<HTMLInputElement>(null);
@@ -44,6 +45,10 @@ export const ChatPage: React.FC = () => {
                 disclaimer: 'This is AI-generated guidance and not a medical diagnosis.',
             },
         });
+
+        if (response.preferred_language) {
+            setPreferredLanguage(response.preferred_language);
+        }
     };
 
     const handleVoiceError = (error: string) => {
@@ -59,6 +64,7 @@ export const ChatPage: React.FC = () => {
         silenceDuration: 2500,
         age: patientAge,
         gender: patientGender,
+        voiceId: preferredLanguage === 'bn' ? 'bn-BD-NabanitaNeural' : undefined,
         onVoiceChatComplete: handleVoiceChatComplete,
         onError: handleVoiceError,
     });
@@ -98,6 +104,9 @@ export const ChatPage: React.FC = () => {
                 text: response.reply,
                 responseMetadata: response
             });
+            if (response.preferred_language) {
+                setPreferredLanguage(response.preferred_language);
+            }
         } catch (error) {
             console.error("Chat error:", error);
             addMessage({

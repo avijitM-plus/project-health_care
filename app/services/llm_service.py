@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 from groq import Groq, RateLimitError, APITimeoutError, APIError
 from app.services.prompt_service import prompt_service
 from app.services.system_prompts import (
+    BANGLA_LANGUAGE_INSTRUCTION,
     CHAT_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
     STATE_EXTRACTION_PROMPT,
@@ -102,6 +103,7 @@ class LLMService:
         chronic_conditions: list[str] | None = None,
         memory_summary: str = "",
         emergency_override: bool = False,
+        language: str = "en",
     ) -> dict:
         """Generate a conversational medical triage response via Groq."""
         user_prompt = prompt_service.get_triage_prompt(
@@ -121,8 +123,12 @@ class LLMService:
         if emergency_override:
             user_prompt += "\n\n[SYSTEM INSTRUCTION: CRITICAL EMERGENCY DETECTED. IMMEDIATELY INVOKE EMERGENCY OVERRIDE PROTOCOL.]"
 
+        system_prompt = CHAT_SYSTEM_PROMPT
+        if language == "bn":
+            system_prompt = CHAT_SYSTEM_PROMPT + BANGLA_LANGUAGE_INSTRUCTION
+
         return self._call_groq(
-            system_prompt=CHAT_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=2048,
             temperature=0.3,

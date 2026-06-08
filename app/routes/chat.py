@@ -46,6 +46,7 @@ from app.services.working_diagnosis_engine import (
     working_diagnosis_engine, derive_clinical_stage, detect_resolution
 )
 from app.services.diagnostic_action_engine import diagnostic_action_engine
+from app.services.language_detector import resolve_language
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -97,6 +98,10 @@ async def chat_endpoint(request: ChatRequest):
         gender=request.gender,
         chronic_conditions=request.chronic_conditions,
     )
+
+    # ── 2b. Language detection ───────────────────────────────────────────────
+    session_lang = resolve_language(user_msg, memory_service.get_language(session_id))
+    memory_service.update_language(session_id, session_lang)
 
     # ── 3. Pure-Python clinical state extraction (no LLM) ───────────────────
     #
@@ -272,6 +277,7 @@ async def chat_endpoint(request: ChatRequest):
             chronic_conditions=meta.chronic_conditions,
             memory_summary=prompt_context,
             emergency_override=is_critical,
+            language=session_lang,
         )
         recommended_tests = state.cached_tests
         t = _tick(session_id, "groq_chat [1 LLM call — test cached]", t)
@@ -292,6 +298,7 @@ async def chat_endpoint(request: ChatRequest):
                 chronic_conditions=meta.chronic_conditions,
                 memory_summary=prompt_context,
                 emergency_override=is_critical,
+                language=session_lang,
             )
             test_future = executor.submit(
                 test_engine.recommend_tests,
@@ -309,8 +316,8 @@ async def chat_endpoint(request: ChatRequest):
         memory_service.update_cached_tests(session_id, recommended_tests, tests_cache_key)
         t = _tick(session_id, "groq_chat+test_engine [2 LLM calls parallel]", t)
 
-    # ── 10. Merge safe advice ────────────────────────────────────────────────
-    if safe_advice and len(llm_output.get("advice", "")) < 20:
+    # ── 10. Merge safe advice (English only — skip for Bangla to avoid mixing languages)
+    if session_lang == "en" and safe_advice and len(llm_output.get("advice", "")) < 20:
         llm_output["advice"] = " | ".join(safe_advice)
 
     # ── 11. Record turn in conversation history ───────────────────────────────
@@ -366,25 +373,26 @@ async def chat_endpoint(request: ChatRequest):
     # ────────────────────────────────────────────────────────────────────────
     t = time.perf_counter()
     if final_followups:
-        # Align to the first (most important) question
-        aligned_replies = clinical_slot_resolver.get_replies_for_question(
-            final_followups[0], refreshed_slots
-        )
-        if aligned_replies:
-            # Question-aligned replies override everything
-            llm_output["suggested_replies"] = aligned_replies
-        elif llm_output.get("suggested_replies"):
-            # Keep LLM's replies — they may already be relevant
-            pass
-        else:
-            # Last resort: highest-priority unresolved slot replies
-            slot_replies = clinical_slot_resolver.get_slot_targeted_suggested_replies(
-                base_symptom_names, refreshed_slots
+        # For Bangla sessions skip the English slot-registry override entirely — the
+        # LLM already generated Bangla replies; don't clobber them with English ones.
+        if session_lang == "en":
+            aligned_replies = clinical_slot_resolver.get_replies_for_question(
+                final_followups[0], refreshed_slots
             )
-            if slot_replies:
-                llm_output["suggested_replies"] = slot_replies
+            if aligned_replies:
+                llm_output["suggested_replies"] = aligned_replies
+            elif llm_output.get("suggested_replies"):
+                pass
+            else:
+                slot_replies = clinical_slot_resolver.get_slot_targeted_suggested_replies(
+                    base_symptom_names, refreshed_slots
+                )
+                if slot_replies:
+                    llm_output["suggested_replies"] = slot_replies
+        elif not llm_output.get("suggested_replies"):
+            # Bangla: keep LLM replies; only add fallback if LLM gave nothing
+            llm_output["suggested_replies"] = []
     else:
-        # No follow-up questions — ensure suggested_replies is present
         if not llm_output.get("suggested_replies"):
             llm_output["suggested_replies"] = []
 
@@ -400,6 +408,7 @@ async def chat_endpoint(request: ChatRequest):
     llm_output["resolved_questions"] = all_resolved
     llm_output["recommended_tests"] = recommended_tests
     llm_output["reports"] = state.reports
+    llm_output["preferred_language"] = session_lang
 
     # Working diagnosis + action plan
     llm_output["working_diagnosis"] = wd_dict

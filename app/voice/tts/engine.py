@@ -16,7 +16,7 @@ import threading
 from typing import Optional
 
 from app.voice.audio_utils.converter import clean_text_for_tts
-from app.voice.tts.kokoro_tts import KokoroTTSBackend
+from app.voice.tts.kokoro_tts import KOKORO_VOICES, KokoroTTSBackend
 from app.voice.tts.piper_tts import PIPER_VOICES, PiperTTSBackend
 
 logger = logging.getLogger(__name__)
@@ -259,12 +259,31 @@ class TTSEngine:
     ) -> tuple[bytes, float]:
         """
         Synthesize with async support.
-        Tries sync backends first, then falls back to edge-tts (async/cloud).
+
+        If voice_id belongs exclusively to edge-tts (e.g. Bangla voices like
+        bn-BD-NabanitaNeural) it bypasses Kokoro/Piper entirely — those backends
+        would silently fall back to their English default voice instead of failing,
+        producing the wrong language.  For all other voices the priority is:
+        Kokoro → Piper → edge-tts.
         """
         if not self._loaded:
             self.load()
 
-        # Try sync backends first
+        # Route edge-tts-only voices directly (Bangla, etc.)
+        is_edge_only = (
+            voice_id is not None
+            and voice_id in EDGE_TTS_VOICES
+            and voice_id not in KOKORO_VOICES
+            and voice_id not in PIPER_VOICES
+        )
+        if is_edge_only:
+            if self._edge.is_loaded:
+                return await self._edge.synthesize_async(text, voice_id, speed, output_format)
+            raise RuntimeError(
+                f"Voice '{voice_id}' requires edge-tts but it is not available."
+            )
+
+        # Try sync backends first (Kokoro → Piper)
         try:
             return self.synthesize(text, voice_id, speed, output_format)
         except RuntimeError:

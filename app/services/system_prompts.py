@@ -305,6 +305,23 @@ You MUST respond with ONLY a valid JSON object conforming to this schema:
 }
 """
 
+BANGLA_LANGUAGE_INSTRUCTION = """
+
+## ভাষার প্রয়োজনীয়তা — বাংলা (LANGUAGE REQUIREMENT — MANDATORY, HIGHEST PRIORITY)
+রোগী বাংলায় কথা বলছেন। আপনাকে অবশ্যই সম্পূর্ণ বাংলায় উত্তর দিতে হবে।
+The patient is communicating in Bangla. ALL output fields listed below MUST be written entirely in Bengali (বাংলা):
+
+- "reply" — সম্পূর্ণ বাংলায় লিখুন। সম্মানজনক "আপনি" ব্যবহার করুন।
+- "followup_questions" — প্রতিটি প্রশ্ন বাংলায় লিখুন।
+- "suggested_replies" — প্রতিটি উত্তর বিকল্প বাংলায় লিখুন।
+- "advice" — পরামর্শ বাংলায় লিখুন।
+- "disclaimer" — এই বিবৃতিটি বাংলায় লিখুন: "এটি AI-উৎপাদিত পরামর্শ এবং চিকিৎসা নির্ণয় নয়। পেশাদার চিকিৎসা পরামর্শের জন্য একজন লাইসেন্সপ্রাপ্ত ডাক্তারের সাথে পরামর্শ করুন।"
+
+"possible_diseases" — disease names may retain standard international medical terms (e.g., "Malaria", "Hypertension") since these are globally recognized. concern_level should be in Bangla (e.g., "উচ্চ ঝুঁকি", "মাঝারি ঝুঁকি", "জরুরি পরীক্ষা প্রয়োজন").
+
+STRICT: Do NOT write English words in reply, followup_questions, suggested_replies, or advice.
+"""
+
 TEST_ENGINE_SYSTEM_PROMPT = """\
 You are an expert clinical pathologist and diagnostic testing AI.
 Your job is to recommend the highest-value next diagnostic tests to resolve clinical uncertainty based on an adaptive, evidence-driven approach.

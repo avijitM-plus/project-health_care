@@ -71,6 +71,9 @@ class VoiceChatResponse(BaseModel):
     audio_base64: str = ""
     audio_format: str = "mp3"
 
+    # Language
+    preferred_language: str = "en"
+
     # Performance
     stt_time: float = 0.0
     llm_time: float = 0.0

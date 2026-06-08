@@ -18,6 +18,7 @@ export interface ChatResponse {
     suggested_replies: string[];
     recommended_tests?: { test_name: string; priority?: string; rationale: string; }[];
     reports?: any[];
+    preferred_language?: string;
 }
 
 export interface ChatRequest {
@@ -113,6 +114,7 @@ export interface VoiceChatResponse {
     // TTS audio (base64-encoded)
     audio_base64: string;
     audio_format: string;
+    preferred_language?: string;
     // Performance
     stt_time: number;
     llm_time: number;
