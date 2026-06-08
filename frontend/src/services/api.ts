@@ -94,5 +94,38 @@ export const apiService = {
         }
 
         return response.json();
-    }
+    },
+
+    async speechToText(
+        audioBlob: Blob,
+        filename: string = 'recording.webm',
+    ): Promise<{ transcribed_text: string; language: string; confidence: number }> {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, filename);
+
+        const response = await fetch(`${API_BASE_URL}/speech-to-text`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Speech-to-text failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async textToSpeech(text: string, voice?: string): Promise<ArrayBuffer> {
+        const response = await fetch(`${API_BASE_URL}/text-to-speech`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, voice }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Text-to-speech failed: ${response.statusText}`);
+        }
+
+        return response.arrayBuffer();
+    },
 };

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { Message } from '../context/ChatContext';
 import { UrgencyBadge } from './UrgencyBadge';
 import { DiseaseCard } from './DiseaseCard';
 import { FollowUpChips } from './FollowUpChips';
-import { Bot, User, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Bot, User, ThumbsUp, ThumbsDown, Volume2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useChat } from '../context/ChatContext';
 import './ChatMessage.css';
@@ -18,6 +18,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
     const metadata = message.responseMetadata;
     const { conversationId } = useChat();
     const [feedbackGiven, setFeedbackGiven] = useState<'helpful' | 'incorrect' | null>(null);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const handleFeedback = async (rating: 'helpful' | 'incorrect') => {
         if (feedbackGiven) return;
@@ -34,15 +36,62 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
         }
     };
 
+    const handleSpeak = async () => {
+        if (isSpeaking) {
+            audioRef.current?.pause();
+            if (audioRef.current?.src) {
+                URL.revokeObjectURL(audioRef.current.src);
+            }
+            audioRef.current = null;
+            setIsSpeaking(false);
+            return;
+        }
+
+        setIsSpeaking(true);
+        try {
+            const buffer = await apiService.textToSpeech(message.text);
+            const blob = new Blob([buffer], { type: 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audioRef.current = audio;
+
+            audio.onended = () => {
+                URL.revokeObjectURL(url);
+                audioRef.current = null;
+                setIsSpeaking(false);
+            };
+
+            audio.onerror = () => {
+                URL.revokeObjectURL(url);
+                audioRef.current = null;
+                setIsSpeaking(false);
+            };
+
+            audio.play();
+        } catch (err) {
+            console.error('TTS error:', err);
+            setIsSpeaking(false);
+        }
+    };
+
     return (
         <div className={`chat-message-wrapper ${isAi ? 'ai-msg' : 'user-msg'} animate-slide-up`}>
             <div className="chat-avatar">
                 {isAi ? <Bot size={20} /> : <User size={20} />}
             </div>
-            
+
             <div className="chat-content">
                 <div className="chat-bubble">
                     <p>{message.text}</p>
+                    {isAi && (
+                        <button
+                            className={`speak-btn${isSpeaking ? ' speaking' : ''}`}
+                            onClick={handleSpeak}
+                            title={isSpeaking ? 'Stop speaking' : 'Listen to this message'}
+                        >
+                            <Volume2 size={13} />
+                        </button>
+                    )}
                 </div>
 
                 {/* AI Metadata Display */}
@@ -94,9 +143,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
                         )}
 
                         {(metadata.suggested_replies?.length > 0 || metadata.followup_questions?.length > 0) && onFollowUpSelect && (
-                            <FollowUpChips 
-                                questions={metadata.suggested_replies?.length > 0 ? metadata.suggested_replies : metadata.followup_questions} 
-                                onSelect={onFollowUpSelect} 
+                            <FollowUpChips
+                                questions={metadata.suggested_replies?.length > 0 ? metadata.suggested_replies : metadata.followup_questions}
+                                onSelect={onFollowUpSelect}
                             />
                         )}
 

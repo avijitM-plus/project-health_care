@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.routes import health, chat, analyze, report, session, xray, feedback, summary
+from app.routes import health, chat, analyze, report, session, xray, feedback, summary, voice
 import time
 import logging
 from collections import defaultdict
@@ -75,6 +75,7 @@ app.include_router(session.router, tags=["Session"])
 app.include_router(xray.router, tags=["Imaging"])
 app.include_router(feedback.router, tags=["Feedback"])
 app.include_router(summary.router, tags=["Session"])
+app.include_router(voice.router, tags=["Voice"])
 
 
 # --- Startup event: log memory configuration ---
@@ -87,6 +88,10 @@ async def startup_event():
         f"Memory config: max_sessions={stats['max_sessions']}, "
         f"ttl={stats['ttl_seconds']}s"
     )
+    # Preload faster-whisper model in background so first STT call is instant
+    import threading
+    from app.services.stt_service import preload_model
+    threading.Thread(target=preload_model, daemon=True).start()
 
 
 @app.get("/")

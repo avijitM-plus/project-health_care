@@ -2,16 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 import { ChatMessage } from '../components/ChatMessage';
-import { Send, FileText, RefreshCw, Paperclip, ScanLine } from 'lucide-react';
+import { Send, FileText, RefreshCw, Paperclip, ScanLine, Mic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
     const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy, patientAge, patientGender } = useChat();
     const [inputValue, setInputValue] = useState('');
+    const [isRecording, setIsRecording] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const xrayInputRef = useRef<HTMLInputElement>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
     const navigate = useNavigate();
 
     const scrollToBottom = () => {
@@ -64,6 +67,48 @@ export const ChatPage: React.FC = () => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
+        }
+    };
+
+    const handleMicClick = async () => {
+        if (isRecording) {
+            mediaRecorderRef.current?.stop();
+            setIsRecording(false);
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                stream.getTracks().forEach((t) => t.stop());
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                if (audioBlob.size === 0) return;
+
+                setIsTyping(true);
+                try {
+                    const result = await apiService.speechToText(audioBlob, 'recording.webm');
+                    setInputValue(result.transcribed_text);
+                } catch (err) {
+                    console.error('STT error:', err);
+                    addMessage({ sender: 'ai', text: 'Could not transcribe audio. Please try again or type your message.' });
+                } finally {
+                    setIsTyping(false);
+                }
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error('Microphone access error:', err);
+            addMessage({ sender: 'ai', text: 'Microphone access was denied. Please allow microphone access in your browser settings.' });
         }
     };
 
@@ -217,6 +262,14 @@ export const ChatPage: React.FC = () => {
                         title="Upload Chest X-Ray (JPG/PNG) — analyzed by MedGemma AI"
                     >
                         <ScanLine size={20} />
+                    </button>
+                    <button
+                        className={`upload-inline-button mic-button${isRecording ? ' recording' : ''}`}
+                        onClick={handleMicClick}
+                        disabled={isTyping && !isRecording}
+                        title={isRecording ? 'Stop recording' : 'Speak your symptoms (English or Bangla)'}
+                    >
+                        <Mic size={20} />
                     </button>
                     <textarea
                         value={inputValue}
