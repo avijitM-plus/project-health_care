@@ -80,7 +80,18 @@ async def analyze_report(
             clinical_slots=analysis.get("clinical_slots", {})
         )
         memory_service.add_report(conversation_id, report_data)
-        
+
+        # Register the test as completed so test_engine never recommends it again
+        from app.services.clinical_state_engine import clinical_state_engine as cse
+        canonical_test = cse.normalize_test_name(report_data.report_type)
+        memory_service.update_state_dicts(
+            session_id=conversation_id,
+            test_history={canonical_test: True},
+        )
+        logger.info(
+            f"Analyze: registered completed test '{canonical_test}' for session {conversation_id}"
+        )
+
         # Merge the extracted symptoms and clinical slots into the active conversation state.
         # Also translate report LLM keys → NBQ slot names so followup_engine sees them.
         if report_data.clinical_slots:
@@ -93,11 +104,13 @@ async def analyze_report(
                 session_id=conversation_id,
                 report_findings=report_data.findings
             )
-            
+
         if report_data.extracted_symptoms:
-            # We assume turn 0 or rely on existing session turn count
             state = memory_service.load(conversation_id)
-            new_records = [SymptomRecord(name=sym, base_name=sym, first_reported_turn=state.turn_count) for sym in report_data.extracted_symptoms]
+            new_records = [
+                SymptomRecord(name=sym, base_name=sym, first_reported_turn=state.turn_count)
+                for sym in report_data.extracted_symptoms
+            ]
             memory_service.merge_symptoms(conversation_id, new_records, turn_number=state.turn_count)
         
         # Trigger trend engine if we have multiple reports

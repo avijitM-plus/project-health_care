@@ -115,12 +115,43 @@ export interface VoiceChatResponse {
     // TTS audio (base64-encoded)
     audio_base64: string;
     audio_format: string;
+    // Voice-optimized short response text
+    voice_response: string;
     preferred_language?: string;
     // Performance
     stt_time: number;
     llm_time: number;
     tts_time: number;
     total_time: number;
+}
+
+// ── Streaming voice events (SSE / WebSocket) ─────────────────────────────────
+
+export interface VoiceStreamEvent {
+    type: 'transcript' | 'audio_chunk' | 'clinical' | 'done' | 'error';
+    // transcript
+    text?: string;
+    language?: string;
+    // audio_chunk
+    index?: number;
+    total?: number;
+    audio_b64?: string;
+    audio_format?: string;
+    cached?: boolean;
+    // clinical
+    urgency?: string;
+    followup_questions?: string[];
+    possible_diseases?: DiseasePrediction[];
+    suggested_replies?: string[];
+    voice_response?: string;
+    ai_response?: string;
+    // done metrics
+    stt_time?: number;
+    llm_time?: number;
+    tts_time?: number;
+    total_time?: number;
+    // error
+    message?: string;
 }
 
 export interface VoiceInfo {

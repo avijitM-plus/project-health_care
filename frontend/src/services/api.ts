@@ -6,6 +6,7 @@ import type {
     ClinicalSummary,
     TranscriptionResult,
     VoiceChatResponse,
+    VoiceStreamEvent,
     VoiceInfo,
     VoiceHealthResponse,
 } from '../types/api';
@@ -210,6 +211,79 @@ export const apiService = {
         }
 
         return response.json();
+    },
+
+    /**
+     * Streaming voice chat via Server-Sent Events.
+     * Calls onEvent for each SSE event (transcript, audio_chunk, clinical, done).
+     * Returns an AbortController so the caller can cancel the stream.
+     */
+    voiceChatStream(
+        audioBlob: Blob,
+        conversationId: string,
+        options: {
+            age?: number;
+            gender?: string;
+            voiceId?: string;
+            speed?: number;
+            language?: string;
+        },
+        onEvent: (event: VoiceStreamEvent) => void,
+        onError?: (err: Error) => void,
+    ): AbortController {
+        const controller = new AbortController();
+
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('conversation_id', conversationId);
+        if (options.age != null) formData.append('age', String(options.age));
+        if (options.gender) formData.append('gender', options.gender);
+        if (options.voiceId) formData.append('voice_id', options.voiceId);
+        formData.append('speed', String(options.speed ?? 1.0));
+        formData.append('language', options.language ?? 'en');
+
+        (async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/voice/chat-stream`, {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Voice stream failed: ${response.statusText}`);
+                }
+
+                const reader = response.body!.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() ?? '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const event: VoiceStreamEvent = JSON.parse(line.slice(6));
+                            onEvent(event);
+                        } catch {
+                            // skip malformed lines
+                        }
+                    }
+                }
+            } catch (err: any) {
+                if (err?.name !== 'AbortError') {
+                    onError?.(err instanceof Error ? err : new Error(String(err)));
+                }
+            }
+        })();
+
+        return controller;
     },
 
     /**

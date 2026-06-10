@@ -71,6 +71,9 @@ class VoiceChatResponse(BaseModel):
     audio_base64: str = ""
     audio_format: str = "mp3"
 
+    # Shortened voice-optimized response text (for Voice Mode display)
+    voice_response: str = ""
+
     # Language
     preferred_language: str = "en"
 
@@ -79,6 +82,42 @@ class VoiceChatResponse(BaseModel):
     llm_time: float = 0.0
     tts_time: float = 0.0
     total_time: float = 0.0
+
+
+# ── Streaming Voice Chat ──────────────────────────────────────────────────────
+
+
+class VoiceStreamEvent(BaseModel):
+    """Single event in the /voice/chat-stream SSE stream."""
+    type: str   # "transcript" | "audio_chunk" | "clinical" | "done" | "error"
+
+    # transcript
+    text: Optional[str] = None
+    language: Optional[str] = None
+
+    # audio_chunk
+    index: Optional[int] = None
+    total: Optional[int] = None
+    audio_b64: Optional[str] = None
+    audio_format: str = "mp3"
+    cached: bool = False
+
+    # clinical
+    urgency: Optional[str] = None
+    followup_questions: Optional[list[str]] = None
+    possible_diseases: Optional[list[dict]] = None
+    suggested_replies: Optional[list[str]] = None
+    voice_response: Optional[str] = None
+    ai_response: Optional[str] = None
+
+    # done metrics
+    stt_time: Optional[float] = None
+    llm_time: Optional[float] = None
+    tts_time: Optional[float] = None
+    total_time: Optional[float] = None
+
+    # error
+    message: Optional[str] = None
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

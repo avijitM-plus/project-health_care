@@ -91,7 +91,7 @@ async def startup_event():
         f"ttl={stats['ttl_seconds']}s"
     )
 
-    # Preload voice engines in background so first voice call is instant
+    # Preload voice engines and warm audio cache in background
     import threading
 
     def _preload_voice():
@@ -106,6 +106,13 @@ async def startup_event():
             tts_engine.load()
         except Exception as exc:
             logger.warning("Could not preload TTS engine: %s", exc)
+
+        # Warm the audio cache for common medical questions (EN + BN)
+        try:
+            from app.services.voice_cache import voice_cache
+            voice_cache.warm_up()
+        except Exception as exc:
+            logger.warning("Could not start voice cache warmup: %s", exc)
 
     threading.Thread(target=_preload_voice, daemon=True).start()
 

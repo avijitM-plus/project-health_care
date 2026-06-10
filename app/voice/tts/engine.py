@@ -13,7 +13,7 @@ from __future__ import annotations
 import io
 import logging
 import threading
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 from app.voice.audio_utils.converter import clean_text_for_tts
 from app.voice.tts.kokoro_tts import KOKORO_VOICES, KokoroTTSBackend
@@ -297,6 +297,33 @@ class TTSEngine:
         raise RuntimeError(
             "No TTS backend available. Install kokoro, piper-tts, or edge-tts."
         )
+
+
+    async def synthesize_streaming(
+        self,
+        text: str,
+        voice_id: Optional[str] = None,
+        speed: float = 1.0,
+    ) -> AsyncIterator[tuple[bytes, int, int]]:
+        """
+        Stream TTS by synthesizing sentence-by-sentence.
+
+        Yields (audio_bytes, chunk_index, total_chunks) for each sentence.
+        Each chunk is a complete MP3 file, decodeable independently.
+        Use this for streaming audio playback to reduce perceived latency.
+        """
+        from app.services.voice_response_optimizer import split_into_tts_chunks
+
+        language = 'bn' if (voice_id and 'bn' in voice_id.lower()) else 'en'
+        chunks = split_into_tts_chunks(text, language)
+
+        if not chunks:
+            return
+
+        total = len(chunks)
+        for i, chunk_text in enumerate(chunks):
+            audio_bytes, _ = await self.synthesize_async(chunk_text, voice_id, speed, 'mp3')
+            yield audio_bytes, i, total
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

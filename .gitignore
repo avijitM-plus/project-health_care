@@ -14,6 +14,9 @@ ENV/
 .DS_Store
 Thumbs.db
 
+#Voice caches chunks
+voice_cache/
+
 # Archives
 *.zip
 *.tar

@@ -1,0 +1,280 @@
+/* ── Voice Mode Panel Overlay ─────────────────────────────────────────────── */
+
+.vmp-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: vmp-fade-in 0.2s ease;
+}
+
+@keyframes vmp-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.vmp-panel {
+    background: linear-gradient(160deg, #1e1b4b 0%, #0f172a 100%);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 24px;
+    padding: 32px 28px 28px;
+    width: min(92vw, 420px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(99,102,241,0.12);
+    animation: vmp-slide-up 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes vmp-slide-up {
+    from { transform: translateY(32px) scale(0.95); opacity: 0; }
+    to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.vmp-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vmp-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(199, 210, 254, 0.85);
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.vmp-close-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: rgba(199, 210, 254, 0.7);
+    transition: background 0.15s, color 0.15s;
+}
+
+.vmp-close-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+/* ── State icon ─────────────────────────────────────────────────────────── */
+
+.vmp-state-icon {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+.vmp-state-idle {
+    background: rgba(99, 102, 241, 0.15);
+    color: rgba(165, 180, 252, 0.7);
+    box-shadow: 0 0 0 0 transparent;
+}
+
+.vmp-state-recording {
+    background: rgba(239, 68, 68, 0.18);
+    color: #f87171;
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.08), 0 0 0 20px rgba(239, 68, 68, 0.04);
+    animation: vmp-pulse 1.2s ease-in-out infinite;
+}
+
+.vmp-state-processing {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    animation: vmp-spin-slow 3s linear infinite;
+}
+
+.vmp-state-playing {
+    background: rgba(99, 102, 241, 0.25);
+    color: #818cf8;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.35);
+    animation: vmp-breathe 1.8s ease-in-out infinite;
+}
+
+.vmp-state-error {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+}
+
+@keyframes vmp-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4), 0 0 0 0 rgba(239,68,68,0.2); }
+    50%       { box-shadow: 0 0 0 12px rgba(239,68,68,0.1), 0 0 0 24px rgba(239,68,68,0.05); }
+}
+
+@keyframes vmp-breathe {
+    0%, 100% { box-shadow: 0 0 12px rgba(99,102,241,0.2); }
+    50%       { box-shadow: 0 0 28px rgba(99,102,241,0.5); }
+}
+
+@keyframes vmp-spin-slow {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ── Waveform ────────────────────────────────────────────────────────────── */
+
+.vmp-waveform-container {
+    width: 100%;
+    background: rgba(99, 102, 241, 0.06);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.vmp-waveform {
+    display: block;
+    width: 100%;
+    height: 80px;
+}
+
+/* ── Status label ────────────────────────────────────────────────────────── */
+
+.vmp-status-label {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 0;
+    transition: color 0.3s;
+}
+
+.vmp-status-idle      { color: rgba(165, 180, 252, 0.55); }
+.vmp-status-recording { color: #f87171; }
+.vmp-status-processing { color: #fbbf24; }
+.vmp-status-playing   { color: #818cf8; }
+.vmp-status-error     { color: #f87171; }
+
+/* ── Transcript + Response ───────────────────────────────────────────────── */
+
+.vmp-transcript,
+.vmp-response {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.vmp-transcript {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(226, 232, 240, 0.8);
+}
+
+.vmp-response {
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    color: #e0e7ff;
+}
+
+.vmp-role-label {
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0.65;
+    padding-top: 2px;
+    flex-shrink: 0;
+}
+
+.vmp-text {
+    flex: 1;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.vmp-controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.vmp-main-btn {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.45);
+}
+
+.vmp-main-btn:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 28px rgba(99, 102, 241, 0.6);
+}
+
+.vmp-main-btn:active {
+    transform: scale(0.96);
+}
+
+.vmp-main-btn.vmp-recording {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.45);
+    animation: vmp-pulse 1.2s ease-in-out infinite;
+}
+
+.vmp-main-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.vmp-interrupt-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 32px;
+    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.vmp-interrupt-btn:hover {
+    background: rgba(239, 68, 68, 0.22);
+    border-color: #f87171;
+}
+
+/* ── Latency metrics (dev) ───────────────────────────────────────────────── */
+
+.vmp-metrics {
+    font-size: 0.72rem;
+    color: rgba(148, 163, 184, 0.6);
+    font-family: monospace;
+    letter-spacing: 0.02em;
+}

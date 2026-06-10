@@ -94,6 +94,11 @@ class ConversationState(BaseModel):
     diagnosis_history: list[dict] = []
     # Language preference — persists across turns ("en" | "bn")
     preferred_language: str = "en"
+    # Clinical State Engine additions (v2)
+    chief_complaint: str | None = None             # First substantive complaint reported
+    red_flag_history: list[dict] = Field(default_factory=list)   # Accumulated flags [{turn, flags}]
+    audit_logs: list[dict] = Field(default_factory=list)          # Per-turn reasoning log
+    validation_warnings: list[str] = Field(default_factory=list)  # Rejected vital values
 
 
 # ---------------------------------------------------------------------------

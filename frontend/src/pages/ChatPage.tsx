@@ -4,16 +4,18 @@ import { useLanguage } from '../context/LanguageContext';
 import { apiService } from '../services/api';
 import { ChatMessage } from '../components/ChatMessage';
 import { VoiceButton } from '../components/VoiceButton';
+import { VoiceModePanel } from '../components/VoiceModePanel';
 import { useVoice } from '../hooks/useVoice';
-import { Send, FileText, RefreshCw, Paperclip, ScanLine, Globe } from 'lucide-react';
+import { Send, FileText, RefreshCw, Paperclip, ScanLine, Globe, Mic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { VoiceChatResponse } from '../types/api';
+import type { VoiceChatResponse, VoiceStreamEvent } from '../types/api';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
     const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy, patientAge, patientGender } = useChat();
     const { language, setLanguage, t, voiceId, speed } = useLanguage();
     const [inputValue, setInputValue] = useState('');
+    const [voiceModeOpen, setVoiceModeOpen] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const xrayInputRef = useRef<HTMLInputElement>(null);
@@ -206,8 +208,53 @@ export const ChatPage: React.FC = () => {
 
     const isVoiceBusy = voice.state === 'recording' || voice.state === 'processing';
 
+    // Voice Mode: add user transcript to chat when received
+    const handleVoiceModeTranscript = (text: string) => {
+        if (text.trim()) {
+            addMessage({ sender: 'user', text });
+        }
+    };
+
+    // Voice Mode: SSE streaming pipeline — results also appear in chat
+    const handleVoiceModeClinical = (event: VoiceStreamEvent) => {
+        if (event.ai_response) {
+            addMessage({
+                sender: 'ai',
+                text: event.ai_response,
+                responseMetadata: {
+                    reply: event.ai_response,
+                    urgency: event.urgency || 'NONE',
+                    followup_questions: event.followup_questions || [],
+                    possible_diseases: event.possible_diseases || [],
+                    suggested_replies: event.suggested_replies || [],
+                    accumulated_symptoms: [],
+                    predictor_available: true,
+                    turn_number: 0,
+                    clinical_slots: {},
+                    stage: 0,
+                    advice: '',
+                    disclaimer: 'This is AI-generated guidance and not a medical diagnosis.',
+                },
+            });
+        }
+    };
+
     return (
         <div className="chat-page">
+            {voiceModeOpen && (
+                <VoiceModePanel
+                    conversationId={conversationId}
+                    language={language}
+                    voiceId={voiceId}
+                    speed={speed}
+                    age={patientAge}
+                    gender={patientGender}
+                    onClose={() => setVoiceModeOpen(false)}
+                    onTranscript={handleVoiceModeTranscript}
+                    onClinical={handleVoiceModeClinical}
+                />
+            )}
+
             <header className="chat-header glass-panel">
                 <div className="header-actions">
                     <button onClick={resetConversation} className="btn-secondary" title={t('header.new_session')}>
@@ -215,6 +262,14 @@ export const ChatPage: React.FC = () => {
                     </button>
                     <button onClick={() => navigate('/report')} className="btn-primary" title={t('header.analyze_report')}>
                         <FileText size={18} /> {t('header.analyze_report')}
+                    </button>
+                    <button
+                        className="voice-mode-toggle-button"
+                        onClick={() => setVoiceModeOpen(true)}
+                        title={language === 'bn' ? 'ভয়েস মোড' : 'Voice Mode'}
+                    >
+                        <Mic size={18} />
+                        <span>{language === 'bn' ? 'ভয়েস' : 'Voice'}</span>
                     </button>
                 </div>
                 <button

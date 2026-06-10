@@ -85,10 +85,18 @@ class MemoryService:
     # ------------------------------------------------------------------
 
     def update_slots(self, session_id: str, new_slots: dict) -> dict:
-        """Merge newly extracted structured slots into the session."""
+        """
+        Merge newly extracted structured slots into the session.
+
+        Uses safe-merge semantics: None / empty-string / "UNKNOWN" values are
+        skipped so earlier good data is never overwritten by empty extractions.
+        """
         state = self.load(session_id)
         if new_slots:
-            state.clinical_slots.update(new_slots)
+            from app.services.clinical_state_engine import clinical_state_engine
+            state.clinical_slots = clinical_state_engine.safe_merge_slots(
+                state.clinical_slots, new_slots
+            )
         return state.clinical_slots
 
     def update_state_dicts(
@@ -100,18 +108,19 @@ class MemoryService:
         test_history: dict = None,
         report_findings: dict = None,
     ) -> None:
-        """Merge new dictionaries into the session state without overwriting existing keys."""
+        """Merge new dicts into session state using safe-merge (skip None/empty)."""
         state = self.load(session_id)
+        from app.services.clinical_state_engine import clinical_state_engine
         if vitals:
-            state.vitals.update(vitals)
+            state.vitals = clinical_state_engine.safe_merge_dict(state.vitals, vitals)
         if risk_factors:
-            state.risk_factors.update(risk_factors)
+            state.risk_factors = clinical_state_engine.safe_merge_dict(state.risk_factors, risk_factors)
         if medications:
-            state.medications.update(medications)
+            state.medications = clinical_state_engine.safe_merge_dict(state.medications, medications)
         if test_history:
-            state.test_history.update(test_history)
+            state.test_history = clinical_state_engine.safe_merge_dict(state.test_history, test_history)
         if report_findings:
-            state.report_findings.update(report_findings)
+            state.report_findings = clinical_state_engine.safe_merge_dict(state.report_findings, report_findings)
 
     def merge_symptoms(
         self,
@@ -508,6 +517,42 @@ class MemoryService:
     def get_imaging_studies(self, session_id: str) -> list[ImagingFindings]:
         """Return all imaging studies for this session."""
         return self.load(session_id).imaging_studies
+
+    # ------------------------------------------------------------------
+    # Clinical State Engine additions
+    # ------------------------------------------------------------------
+
+    def update_chief_complaint(self, session_id: str, complaint: str) -> None:
+        """Set the chief complaint if not already recorded."""
+        state = self.load(session_id)
+        if not state.chief_complaint and complaint:
+            state.chief_complaint = complaint
+
+    def add_red_flag_entry(
+        self, session_id: str, turn: int, flags: list[str]
+    ) -> None:
+        """Append a red-flag record for this turn to the accumulated history."""
+        if not flags:
+            return
+        state = self.load(session_id)
+        state.red_flag_history.append({"turn": turn, "flags": flags})
+
+    def get_all_red_flags(self, session_id: str) -> list[str]:
+        """Return every red flag ever detected across all turns (deduplicated)."""
+        state = self.load(session_id)
+        seen: set[str] = set()
+        result: list[str] = []
+        for entry in state.red_flag_history:
+            for flag in entry.get("flags", []):
+                if flag not in seen:
+                    seen.add(flag)
+                    result.append(flag)
+        return result
+
+    def add_validation_warning(self, session_id: str, warning: str) -> None:
+        """Record a vital-validation rejection warning for audit purposes."""
+        state = self.load(session_id)
+        state.validation_warnings.append(warning)
 
     # ------------------------------------------------------------------
     # Internal helpers

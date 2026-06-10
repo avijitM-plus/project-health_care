@@ -3,6 +3,7 @@ from typing import Tuple, List
 
 logger = logging.getLogger(__name__)
 
+
 class RedFlagEngine:
     """
     Deterministically detects critical emergency red-flag symptoms and slots to
@@ -111,5 +112,30 @@ class RedFlagEngine:
             logger.warning(f"RED FLAG ENGINE TRIGGERED: {detected_flags}")
 
         return is_critical, detected_flags
+
+    def compute_accumulated_urgency(
+        self,
+        all_flags: list[str],
+        existing_peak: str = "NONE",
+    ) -> str:
+        """
+        Compute urgency from ALL accumulated red flags across the session.
+
+        Multiple moderate-severity flags compound to escalate urgency:
+          e.g., fever alone → MEDIUM, but fever + cough_blood + night_sweats → HIGH.
+
+        Delegates to clinical_state_engine.compute_urgency_from_flags().
+        """
+        from app.services.clinical_state_engine import clinical_state_engine
+        urgency, score = clinical_state_engine.compute_urgency_from_flags(
+            all_flags, existing_peak
+        )
+        if score > 0:
+            logger.info(
+                f"RedFlagEngine accumulation: {len(all_flags)} flags, "
+                f"score={score} → urgency={urgency}"
+            )
+        return urgency
+
 
 red_flag_engine = RedFlagEngine()
