@@ -1,22 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
+import { useLanguage } from '../context/LanguageContext';
 import { apiService } from '../services/api';
 import { ChatMessage } from '../components/ChatMessage';
 import { VoiceButton } from '../components/VoiceButton';
 import { useVoice } from '../hooks/useVoice';
-import { Send, FileText, RefreshCw, Paperclip, ScanLine } from 'lucide-react';
+import { Send, FileText, RefreshCw, Paperclip, ScanLine, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { VoiceChatResponse } from '../types/api';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
     const { messages, addMessage, conversationId, resetConversation, isTyping, setIsTyping, addImagingStudy, patientAge, patientGender } = useChat();
+    const { language, setLanguage, t, voiceId, speed } = useLanguage();
     const [inputValue, setInputValue] = useState('');
-    const [preferredLanguage, setPreferredLanguage] = useState<string>('en');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const xrayInputRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
+
+    // ── Language toggle ──────────────────────────────────────────────────
+    const toggleLanguage = () => {
+        setLanguage(language === 'en' ? 'bn' : 'en');
+    };
 
     // ── Voice system ─────────────────────────────────────────────────────
     const handleVoiceChatComplete = (response: VoiceChatResponse) => {
@@ -45,26 +51,24 @@ export const ChatPage: React.FC = () => {
                 disclaimer: 'This is AI-generated guidance and not a medical diagnosis.',
             },
         });
-
-        if (response.preferred_language) {
-            setPreferredLanguage(response.preferred_language);
-        }
     };
 
     const handleVoiceError = (error: string) => {
         addMessage({
             sender: 'ai',
-            text: `Voice error: ${error}. Please try again or type your message.`,
+            text: `${t('voice.error')}: ${error}`,
         });
     };
 
     const voice = useVoice({
         conversationId,
+        language,
         silenceThreshold: 15,
         silenceDuration: 2500,
         age: patientAge,
         gender: patientGender,
-        voiceId: preferredLanguage === 'bn' ? 'bn-BD-NabanitaNeural' : undefined,
+        voiceId,
+        speed,
         onVoiceChatComplete: handleVoiceChatComplete,
         onError: handleVoiceError,
     });
@@ -97,6 +101,7 @@ export const ChatPage: React.FC = () => {
                 conversation_id: conversationId,
                 age: patientAge ?? undefined,
                 gender: patientGender ?? undefined,
+                language,
             });
 
             addMessage({
@@ -104,14 +109,11 @@ export const ChatPage: React.FC = () => {
                 text: response.reply,
                 responseMetadata: response
             });
-            if (response.preferred_language) {
-                setPreferredLanguage(response.preferred_language);
-            }
         } catch (error) {
             console.error("Chat error:", error);
             addMessage({
                 sender: 'ai',
-                text: "I'm sorry, I encountered an error connecting to the server. Please try again."
+                text: t('chat.error'),
             });
         } finally {
             setIsTyping(false);
@@ -168,11 +170,11 @@ export const ChatPage: React.FC = () => {
         // Display a temporary system message to indicate upload started
         addMessage({
             sender: 'ai',
-            text: `Analyzing uploaded report: ${file.name}...`
+            text: `${t('report.analyzing')} ${file.name}...`
         });
 
         try {
-            await apiService.analyzeReport(file, '', conversationId);
+            await apiService.analyzeReport(file, '', conversationId, language);
             
             // Once analysis is done and merged into state, trigger the chat AI automatically
             const response = await apiService.chat({
@@ -180,6 +182,7 @@ export const ChatPage: React.FC = () => {
                 conversation_id: conversationId,
                 age: patientAge ?? undefined,
                 gender: patientGender ?? undefined,
+                language,
             });
 
             addMessage({
@@ -191,7 +194,7 @@ export const ChatPage: React.FC = () => {
             console.error("Upload error:", error);
             addMessage({
                 sender: 'ai',
-                text: "There was an error analyzing the report. Please try again."
+                text: t('report.error'),
             });
         } finally {
             setIsTyping(false);
@@ -207,27 +210,42 @@ export const ChatPage: React.FC = () => {
         <div className="chat-page">
             <header className="chat-header glass-panel">
                 <div className="header-actions">
-                    <button onClick={resetConversation} className="btn-secondary" title="New Chat">
-                        <RefreshCw size={18} /> New Session
+                    <button onClick={resetConversation} className="btn-secondary" title={t('header.new_session')}>
+                        <RefreshCw size={18} /> {t('header.new_session')}
                     </button>
-                    <button onClick={() => navigate('/report')} className="btn-primary" title="Upload Report">
-                        <FileText size={18} /> Analyze Report
+                    <button onClick={() => navigate('/report')} className="btn-primary" title={t('header.analyze_report')}>
+                        <FileText size={18} /> {t('header.analyze_report')}
                     </button>
                 </div>
+                <button
+                    className="language-toggle-button"
+                    onClick={toggleLanguage}
+                    title={language === 'en' ? 'Switch to বাংলা' : 'Switch to English'}
+                    id="language-toggle"
+                >
+                    <Globe size={18} />
+                    <span className="language-toggle-label">
+                        {language === 'en' ? 'EN' : 'বাং'}
+                    </span>
+                </button>
             </header>
 
             <main className="chat-container">
                 {messages.length === 0 ? (
                     <div className="empty-chat animate-slide-up">
                         <div className="empty-chat-icon">🤖</div>
-                        <h2>How can I help you today?</h2>
-                        <p>Describe your symptoms, and I will assist in determining the possible causes and urgency.</p>
+                        <h2>{t('chat.empty.title')}</h2>
+                        <p>{t('chat.empty.subtitle')}</p>
                         <div className="suggestion-chips">
-                            <button onClick={() => handleSend("I have a fever and cough")}>"I have a fever and cough"</button>
-                            <button onClick={() => handleSend("I'm experiencing severe chest pain")}>"I'm experiencing severe chest pain"</button>
+                            <button onClick={() => handleSend(language === 'bn' ? 'আমার জ্বর এবং কাশি হচ্ছে' : 'I have a fever and cough')}>
+                                {t('chat.suggestion.fever')}
+                            </button>
+                            <button onClick={() => handleSend(language === 'bn' ? 'আমার তীব্র বুকে ব্যথা হচ্ছে' : "I'm experiencing severe chest pain")}>
+                                {t('chat.suggestion.chest')}
+                            </button>
                         </div>
                         <div className="voice-cta">
-                            <p className="voice-cta-text">Or speak your symptoms</p>
+                            <p className="voice-cta-text">{t('chat.empty.voice_cta')}</p>
                             <VoiceButton
                                 state={voice.state}
                                 volume={voice.volume}
@@ -279,7 +297,7 @@ export const ChatPage: React.FC = () => {
                         className="upload-inline-button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isTyping || isVoiceBusy}
-                        title="Upload Medical Report (PDF or image)"
+                        title={t('report.upload_report')}
                     >
                         <Paperclip size={20} />
                     </button>
@@ -287,7 +305,7 @@ export const ChatPage: React.FC = () => {
                         className="upload-inline-button xray-upload-button"
                         onClick={() => xrayInputRef.current?.click()}
                         disabled={isTyping || isVoiceBusy}
-                        title="Upload Chest X-Ray (JPG/PNG) — analyzed by MedGemma AI"
+                        title={t('report.upload_xray')}
                     >
                         <ScanLine size={20} />
                     </button>
@@ -309,7 +327,7 @@ export const ChatPage: React.FC = () => {
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyPress}
-                        placeholder="Describe your symptoms here..."
+                        placeholder={t('chat.placeholder')}
                         rows={1}
                         disabled={isTyping || isVoiceBusy}
                     />

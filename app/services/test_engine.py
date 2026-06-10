@@ -19,6 +19,8 @@ class TestRecommendationEngine:
         urgency: str = "UNKNOWN",
         imaging_studies: list[ImagingFindings] | None = None,
         user_message: str = "",
+        test_history: dict = None,
+        report_findings: dict = None,
     ) -> list[dict]:
         """
         Recommend diagnostic tests using a two-layer strategy:
@@ -81,10 +83,15 @@ class TestRecommendationEngine:
         # ── 4. Assemble prompt — pathway context goes FIRST ──────────────────
         pathway_section = f"{pathway_context}\n\n" if pathway_context else ""
 
+        test_history_str = json.dumps(test_history) if test_history else "None"
+        report_findings_str = json.dumps(report_findings) if report_findings else "None"
+
         user_prompt = f"""{pathway_section}Patient Context:
 - Symptoms: {symptoms_text}
 - Clinical Slots: {slots_text}
 - Computed Urgency Level: {urgency}
+- Reported Test History: {test_history_str}
+- Explicit Report Findings: {report_findings_str}
 
 Top Predicted Diseases (Differentials):
 {diseases_str}
@@ -95,8 +102,7 @@ Existing Longitudinal Lab Reports:
 Imaging Studies Already Performed This Session:
 {imaging_str}
 
-IMPORTANT: Do NOT recommend imaging modalities already performed above unless there is
-a strong clinical justification (e.g., repeat CXR to monitor known pneumonia after 48h).
+IMPORTANT: Do NOT recommend imaging modalities or lab tests already performed above (check Test History, Longitudinal Lab Reports, and Imaging Studies) unless there is a strong clinical justification (e.g., repeat CXR to monitor known pneumonia after 48h).
 Identify the missing diagnostic evidence. Recommend the highest-value next tests.
 """
 

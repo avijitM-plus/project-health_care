@@ -12,7 +12,8 @@ class OCRService:
     def extract_text_from_image(self, file_path: str) -> str:
         try:
             image = Image.open(file_path)
-            text = pytesseract.image_to_string(image)
+            # Use bilingual extraction by default for medical reports in Bangladesh
+            text = pytesseract.image_to_string(image, lang='eng+ben')
             logger.info(f"OCR extracted {len(text)} characters from {os.path.basename(file_path)}")
             return text
         except Exception as e:

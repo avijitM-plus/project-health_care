@@ -28,9 +28,9 @@ class STTEngine:
 
     def __init__(self):
         self._backends = [
+            GroqWhisperBackend(),
             FasterWhisperBackend(),
             OpenAIWhisperBackend(),
-            GroqWhisperBackend(),
         ]
         self._active_backend = None
         self._lock = threading.Lock()

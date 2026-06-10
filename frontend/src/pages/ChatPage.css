@@ -13,12 +13,49 @@
     z-index: 10;
     padding: 8px;
     border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .header-actions {
     display: flex;
     gap: 12px;
 }
+
+/* ── Language toggle button ─────────────────────────────────────── */
+
+.language-toggle-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.language-toggle-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.45);
+}
+
+.language-toggle-button:active {
+    transform: translateY(0);
+}
+
+.language-toggle-label {
+    min-width: 24px;
+    text-align: center;
+    letter-spacing: 0.02em;
+}
+
 
 button {
     cursor: pointer;

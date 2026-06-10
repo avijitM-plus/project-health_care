@@ -4,6 +4,7 @@ import type { ReportAnalysisResponse } from '../types/api';
 import { UploadCloud, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useChat } from '../context/ChatContext';
+import { useLanguage } from '../context/LanguageContext';
 import './ReportPage.css';
 
 export const ReportPage: React.FC = () => {
@@ -13,6 +14,7 @@ export const ReportPage: React.FC = () => {
     const [result, setResult] = useState<ReportAnalysisResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { conversationId } = useChat();
+    const { language, t } = useLanguage();
     
     const navigate = useNavigate();
 
@@ -25,7 +27,7 @@ export const ReportPage: React.FC = () => {
 
     const handleUpload = async () => {
         if (!file) {
-            setError("Please select a file to upload.");
+            setError(t('report.error'));
             return;
         }
 
@@ -33,11 +35,14 @@ export const ReportPage: React.FC = () => {
         setError(null);
 
         try {
-            const data = await apiService.analyzeReport(file, symptoms, conversationId);
+            // Note: OCR extraction remains language-independent.
+            // The language is passed here to ensure the AI *explanation* of the report
+            // is generated in the user's selected language.
+            const data = await apiService.analyzeReport(file, symptoms, conversationId, language);
             setResult(data);
         } catch (err) {
             console.error(err);
-            setError("Failed to analyze the report. Please try again.");
+            setError(t('report.error'));
         } finally {
             setIsLoading(false);
         }
@@ -47,14 +52,14 @@ export const ReportPage: React.FC = () => {
         <div className="report-page">
             <header className="report-header glass-panel">
                 <button onClick={() => navigate('/')} className="btn-secondary">
-                    <ArrowLeft size={18} /> Back to Chat
+                    <ArrowLeft size={18} /> {t('app.title')}
                 </button>
-                <h2>Medical Report Analysis</h2>
+                <h2>{t('report.title')}</h2>
             </header>
 
             <main className="report-container">
                 <div className="upload-section glass-panel">
-                    <h3>Upload Lab Report or Prescription</h3>
+                    <h3>{t('report.upload')}</h3>
                     
                     <div className="file-drop-area">
                         <input 
@@ -67,19 +72,17 @@ export const ReportPage: React.FC = () => {
                         <label htmlFor="file-upload" className="file-label">
                             <UploadCloud size={48} className="upload-icon" />
                             <span className="upload-text">
-                                {file ? file.name : "Click to upload or drag and drop"}
+                                {file ? file.name : t('report.upload_report')}
                             </span>
-                            <span className="upload-hint">PDF, PNG, JPG (max 10MB)</span>
                         </label>
                     </div>
 
                     <div className="symptoms-input">
-                        <label htmlFor="symptoms">Additional Symptoms or Context (Optional)</label>
                         <textarea
                             id="symptoms"
                             value={symptoms}
                             onChange={(e) => setSymptoms(e.target.value)}
-                            placeholder="e.g., I have been feeling fatigued for 2 weeks..."
+                            placeholder={t('chat.placeholder')}
                             rows={3}
                         />
                     </div>
@@ -91,7 +94,7 @@ export const ReportPage: React.FC = () => {
                         onClick={handleUpload}
                         disabled={!file || isLoading}
                     >
-                        {isLoading ? <><Loader2 size={18} className="spin" /> Analyzing...</> : "Analyze Report"}
+                        {isLoading ? <><Loader2 size={18} className="spin" /> {t('report.analyzing')}</> : t('report.upload')}
                     </button>
                 </div>
 

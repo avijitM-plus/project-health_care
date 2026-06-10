@@ -376,3 +376,72 @@
     background-color: #e0e7ff !important;
     color: #4338ca !important;
 }
+
+/* ── Settings Section ───────────────────────────────────────────────── */
+
+.settings-section {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 16px;
+}
+
+.settings-group {
+    margin-bottom: 14px;
+}
+
+.settings-group:last-child {
+    margin-bottom: 0;
+}
+
+.settings-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.settings-toggle-group {
+    display: flex;
+    gap: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+}
+
+.settings-toggle-btn {
+    flex: 1;
+    padding: 7px 12px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border: none;
+    background: var(--bg-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-right: 1px solid #e2e8f0;
+    border-radius: 0;
+    justify-content: center;
+}
+
+.settings-toggle-btn:last-child {
+    border-right: none;
+}
+
+.settings-toggle-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    font-weight: 600;
+}
+
+.settings-toggle-btn:not(.active):hover {
+    background: #f1f5f9;
+    color: var(--text-main);
+}
+
+.settings-toggle-triple .settings-toggle-btn {
+    padding: 7px 8px;
+    font-size: 0.75rem;
+}
+

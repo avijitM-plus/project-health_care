@@ -99,72 +99,105 @@ async def chat_endpoint(request: ChatRequest):
         chronic_conditions=request.chronic_conditions,
     )
 
-    # ── 2b. Language detection ───────────────────────────────────────────────
-    session_lang = resolve_language(user_msg, memory_service.get_language(session_id))
+    # ── 2b. Language setting (from explicit frontend selection) ──────────────
+    session_lang = request.language
     memory_service.update_language(session_id, session_lang)
 
-    # ── 3. Pure-Python clinical state extraction (no LLM) ───────────────────
-    #
-    # Replaces the previous state_extractor.extract_state() Groq call.
-    # Two fast sub-steps run in pure Python:
-    #
-    #   3a. Regex slot resolver — extracts structured clinical slots
-    #       (e.g., "dry cough" → cough_type: dry, "101°F" → fever_temperature: 101°F)
-    #
-    #   3b. Synonym map + keyword scan — detects Kaggle symptom names
-    #       (e.g., "tired" → fatigue, "stomach ache" → stomach_pain)
-    #
-    # Question resolution (which pending questions this message answers) is handled
-    # by the main Groq chat response's `resolved_questions` field.
-    # ────────────────────────────────────────────────────────────────────────
+    # ── 3. Clinical state extraction (LLM + Regex fallback) ─────────────────────
     t = time.perf_counter()
     current_slots = state.clinical_slots
     pending_qs = memory_service.get_pending_questions(session_id)
 
-    # 3a. Regex deterministic slot extraction
+    # 3a. Regex deterministic slot extraction (for reliable backup)
     deterministic_slots = clinical_slot_resolver.resolve_from_text(user_msg, current_slots)
 
-    # 3b. Fast Python symptom extraction (synonym map + keyword scan)
-    extracted_symptoms = state_extractor.extract_symptoms_fast(user_msg)
+    # 3b. LLM extraction for symptoms, complex slots, vitals, risk factors, medications
+    extraction_response = state_extractor.extract_state(
+        text=user_msg,
+        current_slots=current_slots,
+        pending_questions=pending_qs,
+    )
 
     t = _tick(session_id, "slot_resolution+symptom_extract", t)
 
     # ── 4. Merge state ───────────────────────────────────────────────────────
-    normalized_llm_slots = clinical_slot_resolver.normalize_slot_names(deterministic_slots)
-    memory_service.update_slots(session_id, normalized_llm_slots)
+    # Merge deterministic slots with LLM slots
+    combined_slots = {**deterministic_slots, **extraction_response.mutated_slots}
+    normalized_slots = clinical_slot_resolver.normalize_slot_names(combined_slots)
+    memory_service.update_slots(session_id, normalized_slots)
 
-    new_records = [SymptomRecord(name=sym, base_name=sym) for sym in extracted_symptoms]
+    # Validate vitals
+    valid_vitals, vitals_warnings = clinical_slot_resolver.validate_vitals(extraction_response.vitals)
+
+    # Update new state dicts
+    memory_service.update_state_dicts(
+        session_id=session_id,
+        vitals=valid_vitals,
+        risk_factors=extraction_response.risk_factors,
+        medications=extraction_response.medications,
+    )
+
+    new_records = [SymptomRecord(name=sym, base_name=sym) for sym in extraction_response.normalized_symptoms]
     memory_service.merge_symptoms(session_id, new_records, turn_number=turn)
+
+    # Handle resolved questions
+    if hasattr(extraction_response, "resolved_questions") and extraction_response.resolved_questions:
+        memory_service.add_answered_questions(session_id, extraction_response.resolved_questions)
 
     all_symptom_names = memory_service.get_symptom_names(session_id)
     base_symptom_names = memory_service.get_base_symptom_names(session_id)
 
-    # Derive severity / duration from deterministic slots or existing session state
+    # Derive severity / duration from slots or existing session state
     severity = str(
-        deterministic_slots.get("severity", state.clinical_slots.get("severity", "UNKNOWN"))
+        normalized_slots.get("severity", state.clinical_slots.get("severity", "UNKNOWN"))
     )
     duration = str(
-        deterministic_slots.get("duration", state.clinical_slots.get("duration", "None"))
+        normalized_slots.get("duration", state.clinical_slots.get("duration", "None"))
     )
 
     logger.info(
         f"[{session_id}] Turn {turn}: "
         f"det_slots={list(deterministic_slots.keys())}, "
-        f"new_symptoms={extracted_symptoms}, "
+        f"new_symptoms={extraction_response.normalized_symptoms}, "
         f"accumulated={len(all_symptom_names)}"
     )
 
-    # ── 5. Disease prediction ────────────────────────────────────────────────
+    # ── 5. Disease prediction (Weighted Diagnosis Engine) ────────────────────────
     t = time.perf_counter()
     predictor_available = True
     try:
-        patient_gender = state.metadata.gender or state.clinical_slots.get("gender")
-        patient_age = state.metadata.age or state.clinical_slots.get("age")
-        predicted = predictor_service.predict_disease(
-            base_symptom_names, gender=patient_gender, age=patient_age
+        from app.services.weighted_diagnosis_engine import weighted_diagnosis_engine
+        
+        # Flatten report findings and imaging for the engine
+        flat_reports = {}
+        for r in state.reports:
+            if r.findings:
+                for k, v in r.findings.items():
+                    # For numeric lab values, one could define rules, but here we just pass the keys
+                    # if the report engine already extracted them as clinical_slots (which it does via map_report_slots)
+                    pass
+            if r.clinical_slots:
+                for k, v in r.clinical_slots.items():
+                    flat_reports[k] = v
+        
+        # Also include state.report_findings directly
+        flat_reports.update(state.report_findings)
+                    
+        flat_imaging = []
+        for study in state.imaging_studies:
+            if study.clinical_slots:
+                flat_imaging.extend([k for k, v in study.clinical_slots.items() if v])
+
+        predicted = weighted_diagnosis_engine.predict(
+            symptoms=base_symptom_names,
+            vitals=state.vitals,
+            clinical_slots=state.clinical_slots,
+            reports=flat_reports,
+            risk_factors=state.risk_factors,
+            imaging_findings=flat_imaging
         )
     except Exception as e:
-        logger.error(f"[{session_id}] Predictor failed: {e}")
+        logger.error(f"[{session_id}] Weighted Predictor failed: {e}")
         predicted = []
         predictor_available = False
     memory_service.update_predictions(session_id, predicted)
@@ -218,7 +251,12 @@ async def chat_endpoint(request: ChatRequest):
     t = time.perf_counter()
     raw_urgency = emergency_engine.check_urgency(base_symptom_names, user_text=user_msg)
     urgency = memory_service.escalate_urgency(session_id, raw_urgency)
-    is_critical, detected_flags = red_flag_engine.check_red_flags(all_symptom_names, user_msg)
+    is_critical, detected_flags = red_flag_engine.check_red_flags(
+        all_symptom_names, 
+        user_msg, 
+        vitals=state.vitals, 
+        clinical_slots=state.clinical_slots
+    )
     if is_critical:
         urgency = memory_service.escalate_urgency(session_id, "EMERGENCY")
     t = _tick(session_id, "emergency_detection", t)
@@ -309,6 +347,8 @@ async def chat_endpoint(request: ChatRequest):
                 urgency=urgency,
                 imaging_studies=state.imaging_studies,
                 user_message=user_msg,
+                test_history=state.test_history,
+                report_findings=state.report_findings,
             )
             llm_output = chat_future.result()
             recommended_tests = test_future.result()
@@ -440,4 +480,39 @@ async def chat_endpoint(request: ChatRequest):
         f"test_cache={'HIT' if cache_hit else 'MISS'}"
     )
 
-    return ChatResponse(**llm_output)
+    # Safe serialization to prevent Pydantic validation errors from LLM hallucinations
+    try:
+        response_model = ChatResponse(**llm_output)
+    except Exception as e:
+        logger.warning(f"[{session_id}] Validation error creating ChatResponse: {e}")
+        # Repair malformed possible_diseases (e.g. translated keys or list of strings)
+        if "possible_diseases" in llm_output and isinstance(llm_output["possible_diseases"], list):
+            repaired_diseases = []
+            for d in llm_output["possible_diseases"]:
+                if isinstance(d, dict):
+                    # Check for translated keys or fallback to defaults
+                    name = d.get("name") or d.get("রোগের নাম") or d.get("রোগ") or "Unknown"
+                    concern = d.get("concern_level") or d.get("ঝুঁকি") or d.get("উদ্বেগের মাত্রা") or "UNKNOWN"
+                    repaired_diseases.append({"name": str(name), "concern_level": str(concern)})
+                elif isinstance(d, str):
+                    repaired_diseases.append({"name": d, "concern_level": "UNKNOWN"})
+            llm_output["possible_diseases"] = repaired_diseases
+        else:
+            llm_output["possible_diseases"] = []
+
+        try:
+            response_model = ChatResponse(**llm_output)
+        except Exception as e2:
+            logger.error(f"[{session_id}] Fatal validation error: {e2}")
+            # Total fallback to guarantee valid response
+            safe_output = {
+                "reply": llm_output.get("reply", "I'm sorry, I couldn't process that properly."),
+                "possible_diseases": [],
+                "urgency": "NONE",
+                "followup_questions": [],
+                "suggested_replies": [],
+                "stage": 1,
+            }
+            response_model = ChatResponse(**safe_output)
+
+    return response_model

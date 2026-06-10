@@ -110,12 +110,12 @@ class EdgeTTSBackend:
             voice_id = self.default_voice
 
         # Speed adjustment for edge-tts: "+20%" or "-10%"
-        rate_str = ""
+        rate_str = "+0%"
         if speed != 1.0:
             pct = int((speed - 1.0) * 100)
             rate_str = f"+{pct}%" if pct >= 0 else f"{pct}%"
 
-        communicate = edge_tts.Communicate(cleaned, voice_id, rate=rate_str or None)
+        communicate = edge_tts.Communicate(cleaned, voice_id, rate=rate_str)
         buf = io.BytesIO()
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":

@@ -23,7 +23,8 @@ MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
 async def analyze_report(
     file: UploadFile = File(...), 
     symptoms: Optional[str] = Form(None),
-    conversation_id: Optional[str] = Form(None)
+    conversation_id: Optional[str] = Form(None),
+    language: str = Form("en")
 ):
     """
     Accepts a PDF or image upload of a medical report.
@@ -63,8 +64,8 @@ async def analyze_report(
 
     logger.info(f"Report analyzed: {safe_filename} ({len(extracted_text)} chars extracted)")
 
-    # Use LLM for analysis
-    analysis = llm_service.analyze_report(extracted_text, symptoms or "")
+    # Use LLM for analysis (passing explicit UI language for the explanation)
+    analysis = llm_service.analyze_report(extracted_text, symptoms or "", language=language)
     
     # If a conversation is active, inject the findings into the memory history
     trend_summary = ""
@@ -86,6 +87,12 @@ async def analyze_report(
             nbq_slots = clinical_slot_resolver.map_report_slots(report_data.clinical_slots)
             merged_report_slots = {**report_data.clinical_slots, **nbq_slots}
             memory_service.update_slots(conversation_id, merged_report_slots)
+
+        if report_data.findings:
+            memory_service.update_state_dicts(
+                session_id=conversation_id,
+                report_findings=report_data.findings
+            )
             
         if report_data.extracted_symptoms:
             # We assume turn 0 or rely on existing session turn count

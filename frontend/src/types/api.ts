@@ -27,6 +27,7 @@ export interface ChatRequest {
     age?: number | null;
     gender?: string | null;
     chronic_conditions?: string | null;
+    language?: string;
 }
 
 export interface ClinicalSummary {

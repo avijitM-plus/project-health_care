@@ -39,7 +39,12 @@ export const apiService = {
         return response.json();
     },
 
-    async analyzeReport(file: File, symptoms: string, conversationId?: string): Promise<ReportAnalysisResponse> {
+    async analyzeReport(
+        file: File,
+        symptoms: string,
+        conversationId?: string,
+        language?: string,
+    ): Promise<ReportAnalysisResponse> {
         const formData = new FormData();
         formData.append('file', file);
         if (symptoms) {
@@ -47,6 +52,9 @@ export const apiService = {
         }
         if (conversationId) {
             formData.append('conversation_id', conversationId);
+        }
+        if (language) {
+            formData.append('language', language);
         }
 
         const response = await fetch(`${API_BASE_URL}/analyze-report`, {
@@ -110,14 +118,16 @@ export const apiService = {
 
     /**
      * Transcribe audio to text using the STT engine.
-     * Calls the new /voice/transcribe endpoint.
+     * Passes the user's selected language for accurate recognition.
      */
     async speechToText(
         audioBlob: Blob,
         filename: string = 'recording.webm',
+        language: string = 'en',
     ): Promise<TranscriptionResult> {
         const formData = new FormData();
         formData.append('audio', audioBlob, filename);
+        formData.append('language', language);
 
         const response = await fetch(`${API_BASE_URL}/voice/transcribe`, {
             method: 'POST',
@@ -135,12 +145,14 @@ export const apiService = {
     /**
      * Convert text to speech using the TTS engine.
      * Returns raw audio bytes (ArrayBuffer).
+     * Language determines voice selection if no voiceId is provided.
      */
     async textToSpeech(
         text: string,
         voiceId?: string,
         speed: number = 1.0,
         outputFormat: string = 'mp3',
+        language: string = 'en',
     ): Promise<ArrayBuffer> {
         const response = await fetch(`${API_BASE_URL}/voice/synthesize`, {
             method: 'POST',
@@ -150,6 +162,7 @@ export const apiService = {
                 voice_id: voiceId,
                 speed,
                 output_format: outputFormat,
+                language,
             }),
         });
 
@@ -163,7 +176,7 @@ export const apiService = {
 
     /**
      * Full voice chat pipeline — audio → STT → IASIS → TTS → response.
-     * This is the primary voice conversation endpoint.
+     * Language controls STT recognition, AI response, and TTS voice.
      */
     async voiceChat(
         audioBlob: Blob,
@@ -173,6 +186,7 @@ export const apiService = {
             gender?: string;
             voiceId?: string;
             speed?: number;
+            language?: string;
         },
     ): Promise<VoiceChatResponse> {
         const formData = new FormData();
@@ -183,6 +197,7 @@ export const apiService = {
         if (options?.gender) formData.append('gender', options.gender);
         if (options?.voiceId) formData.append('voice_id', options.voiceId);
         if (options?.speed) formData.append('speed', String(options.speed));
+        if (options?.language) formData.append('language', options.language);
 
         const response = await fetch(`${API_BASE_URL}/voice/chat`, {
             method: 'POST',

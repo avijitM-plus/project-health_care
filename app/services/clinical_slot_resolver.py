@@ -879,6 +879,99 @@ class ClinicalSlotResolver:
         return extracted
 
     # ------------------------------------------------------------------
+    # 1b. Vitals Extraction and Numeric Validation
+    # ------------------------------------------------------------------
+
+    def validate_vitals(self, vitals: dict) -> tuple[dict, list[str]]:
+        """
+        Apply medical sanity checks to numeric vitals.
+        Returns (valid_vitals, rejected_warnings).
+        """
+        valid = {}
+        warnings = []
+
+        def _extract_number(val: Any) -> float | None:
+            if isinstance(val, (int, float)):
+                return float(val)
+            if isinstance(val, str):
+                match = re.search(r"(\d+(?:\.\d+)?)", val)
+                if match:
+                    return float(match.group(1))
+            return None
+
+        for key, value in vitals.items():
+            num = _extract_number(value)
+            if num is None:
+                valid[key] = value # keep non-numeric values as is, or skip? Let's keep.
+                continue
+
+            # Medical sanity ranges
+            if key in ("temperature", "fever", "fever_temperature"):
+                # Handle Fahrenheit
+                if 90 <= num <= 115:
+                    valid[key] = value
+                # Handle Celsius
+                elif 32 <= num <= 46:
+                    valid[key] = value
+                else:
+                    msg = f"Temperature {num} is out of physiological range (90-115 F / 32-46 C)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+
+            elif key == "heart_rate":
+                if 30 <= num <= 250:
+                    valid[key] = value
+                else:
+                    msg = f"Heart rate {num} out of range (30-250 bpm)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+
+            elif key == "respiratory_rate":
+                if 8 <= num <= 60:
+                    valid[key] = value
+                else:
+                    msg = f"Respiratory rate {num} out of range (8-60 breaths/min)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+
+            elif key == "oxygen_saturation":
+                if 50 <= num <= 100:
+                    valid[key] = value
+                else:
+                    msg = f"Oxygen saturation {num}% out of range (50-100%)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+
+            elif key == "systolic_bp":
+                if 60 <= num <= 250:
+                    valid[key] = value
+                else:
+                    msg = f"Systolic BP {num} out of range (60-250)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+
+            elif key == "diastolic_bp":
+                if 30 <= num <= 150:
+                    valid[key] = value
+                else:
+                    msg = f"Diastolic BP {num} out of range (30-150)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+            
+            elif key == "weight":
+                if 5 <= num <= 1000:
+                    valid[key] = value
+                else:
+                    msg = f"Weight {num} out of range (5-1000)."
+                    logger.warning(f"Sanity Check Failed: {msg}")
+                    warnings.append(msg)
+
+            else:
+                valid[key] = value
+
+        return valid, warnings
+
+    # ------------------------------------------------------------------
     # 2. Slot name normalization (LLM aliases → canonical names)
     # ------------------------------------------------------------------
 

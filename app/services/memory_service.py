@@ -91,6 +91,28 @@ class MemoryService:
             state.clinical_slots.update(new_slots)
         return state.clinical_slots
 
+    def update_state_dicts(
+        self,
+        session_id: str,
+        vitals: dict = None,
+        risk_factors: dict = None,
+        medications: dict = None,
+        test_history: dict = None,
+        report_findings: dict = None,
+    ) -> None:
+        """Merge new dictionaries into the session state without overwriting existing keys."""
+        state = self.load(session_id)
+        if vitals:
+            state.vitals.update(vitals)
+        if risk_factors:
+            state.risk_factors.update(risk_factors)
+        if medications:
+            state.medications.update(medications)
+        if test_history:
+            state.test_history.update(test_history)
+        if report_findings:
+            state.report_findings.update(report_findings)
+
     def merge_symptoms(
         self,
         session_id: str,

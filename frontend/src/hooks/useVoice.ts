@@ -8,6 +8,7 @@
  *   - Real-time volume/waveform data for visualization
  *   - Audio playback with controls
  *   - Full voice chat pipeline (audio → STT → AI → TTS → playback)
+ *   - Explicit language control (no auto-detection)
  *   - Error handling for missing mic, permission denied, etc.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -18,6 +19,8 @@ export type VoiceState = 'idle' | 'recording' | 'processing' | 'playing';
 
 interface UseVoiceOptions {
     conversationId: string;
+    /** Explicit language for STT/TTS — 'en' or 'bn'. No auto-detection. */
+    language: string;
     /** Silence threshold (0–255). Lower = more sensitive. Default 15. */
     silenceThreshold?: number;
     /** Silence duration (ms) before auto-stop. Default 2500. */
@@ -25,9 +28,9 @@ interface UseVoiceOptions {
     /** Patient demographics for voice chat */
     age?: number | null;
     gender?: string | null;
-    /** TTS voice preference */
+    /** TTS voice preference (resolved from LanguageContext) */
     voiceId?: string;
-    /** TTS speed */
+    /** TTS speed (resolved from LanguageContext) */
     speed?: number;
     /** Callback when voice chat completes */
     onVoiceChatComplete?: (response: VoiceChatResponse) => void;
@@ -64,6 +67,7 @@ interface UseVoiceReturn {
 export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     const {
         conversationId,
+        language,
         silenceThreshold = 15,
         silenceDuration = 2500,
         age,
@@ -240,7 +244,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
                     return;
                 }
 
-                // Process voice chat pipeline
+                // Process voice chat pipeline — language is explicitly passed
                 setState('processing');
                 try {
                     const response = await apiService.voiceChat(audioBlob, conversationId, {
@@ -248,6 +252,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
                         gender: gender ?? undefined,
                         voiceId,
                         speed,
+                        language,
                     });
 
                     onVoiceChatComplete?.(response);
@@ -292,7 +297,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
             onError?.(msg);
             setState('idle');
         }
-    }, [isSupported, conversationId, age, gender, voiceId, speed, onVoiceChatComplete, onError, cleanup, startVolumeMonitoring]);
+    }, [isSupported, conversationId, language, age, gender, voiceId, speed, onVoiceChatComplete, onError, cleanup, startVolumeMonitoring]);
 
     // ── Stop recording ───────────────────────────────────────────────────────
 
@@ -363,7 +368,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
 
         setState('processing');
         try {
-            const audioBuffer = await apiService.textToSpeech(text, voiceId, speed);
+            const audioBuffer = await apiService.textToSpeech(text, voiceId, speed, 'mp3', language);
             // Chunked encoding — avoids stack overflow on large buffers
             const bytes = new Uint8Array(audioBuffer);
             let binary = '';
@@ -377,7 +382,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
             setError('Text-to-speech failed');
             setState('idle');
         }
-    }, [voiceId, speed, playAudio]);
+    }, [voiceId, speed, language, playAudio]);
 
     const stopAudio = useCallback(() => {
         if (audioPlayerRef.current) {

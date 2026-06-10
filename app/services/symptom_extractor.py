@@ -265,6 +265,9 @@ class StateExtractor:
         )
 
         mutated_slots = result_dict.get("mutated_slots", {})
+        vitals = result_dict.get("vitals", {})
+        risk_factors = result_dict.get("risk_factors", {})
+        medications = result_dict.get("medications", {})
         raw_symptoms = result_dict.get("normalized_symptoms", [])
         resolved_questions = result_dict.get("resolved_questions", [])
 
@@ -286,12 +289,16 @@ class StateExtractor:
 
         logger.info(
             f"StateExtractor: {len(mutated_slots)} slots, "
+            f"{len(vitals)} vitals, {len(risk_factors)} risks, {len(medications)} meds, "
             f"{len(valid_symptoms)}/{len(raw_symptoms)} valid symptoms, "
             f"{len(resolved_questions)} resolved questions"
         )
 
         return StateExtractionResponse(
             mutated_slots=mutated_slots,
+            vitals=vitals,
+            risk_factors=risk_factors,
+            medications=medications,
             normalized_symptoms=valid_symptoms,
             resolved_questions=resolved_questions,
         )

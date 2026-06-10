@@ -26,7 +26,6 @@ from pydantic import BaseModel
 from app.voice.stt.engine import stt_engine
 from app.voice.tts.engine import tts_engine
 from app.voice.audio_utils.validator import AudioValidationError, validate_audio
-from app.services.language_detector import resolve_language
 from app.services.memory_service import MemoryService
 from app.voice.schemas import (
     TranscriptionResult,
@@ -54,6 +53,7 @@ class TTSRequest(BaseModel):
     voice_id: Optional[str] = None
     speed: float = 1.0
     output_format: str = "mp3"
+    language: str = "en"
 
 
 # ── Backward-compatible response schema ───────────────────────────────────────
@@ -69,7 +69,10 @@ class LegacySTTResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/voice/transcribe", response_model=TranscriptionResult, tags=["Voice"])
-async def voice_transcribe(audio: UploadFile = File(...)):
+async def voice_transcribe(
+    audio: UploadFile = File(...),
+    language: str = Form("en"),
+):
     """
     Transcribe an uploaded audio file to text.
 
@@ -86,9 +89,9 @@ async def voice_transcribe(audio: UploadFile = File(...)):
     except AudioValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # Transcribe
+    # Transcribe (pass the explicit language to the STT engine)
     try:
-        result = stt_engine.transcribe(raw, filename)
+        result = stt_engine.transcribe(raw, filename, language=language)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except RuntimeError as exc:
@@ -126,10 +129,17 @@ async def voice_synthesize(request: TTSRequest):
     if not (request.text or "").strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
+    # Ensure the voice matches the requested language
+    final_voice_id = _VOICE_FOR_LANG.get(request.language, _VOICE_FOR_LANG["en"])
+    if request.voice_id:
+        v_info = next((v for v in tts_engine.voices if v["voice_id"] == request.voice_id), None)
+        if v_info and v_info["language"] == request.language:
+            final_voice_id = request.voice_id
+
     try:
         audio_bytes, duration = await tts_engine.synthesize_async(
             text=request.text,
-            voice_id=request.voice_id,
+            voice_id=final_voice_id,
             speed=request.speed,
             output_format=request.output_format,
         )
@@ -164,6 +174,7 @@ async def voice_chat(
     gender: Optional[str] = Form(None),
     voice_id: Optional[str] = Form(None),
     speed: float = Form(1.0),
+    language: str = Form("en"),
 ):
     """
     Full voice conversation pipeline:
@@ -185,10 +196,10 @@ async def voice_chat(
     except AudioValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # ── Step 2: STT ───────────────────────────────────────────────────────
+    # ── Step 2: STT (using explicitly provided language) ──────────────────
     stt_start = time.perf_counter()
     try:
-        stt_result = stt_engine.transcribe(raw, filename)
+        stt_result = stt_engine.transcribe(raw, filename, language=language)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except RuntimeError as exc:
@@ -204,12 +215,8 @@ async def voice_chat(
         conversation_id, transcript, stt_time, stt_result.get("engine"),
     )
 
-    # ── Step 2b: Resolve and persist session language ─────────────────────
-    session_lang = resolve_language(transcript, memory_service.get_language(conversation_id))
-    memory_service.update_language(conversation_id, session_lang)
-    # Use caller-supplied voice_id only if explicitly provided; otherwise
-    # pick the language-appropriate default.
-    effective_voice_id = voice_id if voice_id else _VOICE_FOR_LANG.get(session_lang)
+    # ── Step 2b: Set session language from frontend ───────────────────────
+    memory_service.update_language(conversation_id, language)
 
     # ── Step 3: Send to IASIS clinical engine ─────────────────────────────
     llm_start = time.perf_counter()
@@ -222,6 +229,7 @@ async def voice_chat(
             conversation_id=conversation_id,
             age=age,
             gender=gender,
+            language=language,
         )
         chat_response = await chat_endpoint(chat_request)
         ai_response_text = chat_response.reply or ""
@@ -232,7 +240,7 @@ async def voice_chat(
             for d in (chat_response.possible_diseases or [])
         ]
         suggested_replies = chat_response.suggested_replies or []
-        response_lang = getattr(chat_response, "preferred_language", session_lang)
+        response_lang = getattr(chat_response, "preferred_language", language)
     except Exception as exc:
         logger.error("Voice chat LLM error: %s", exc, exc_info=True)
         ai_response_text = "I'm sorry, I encountered an error processing your message. Please try again."
@@ -240,13 +248,21 @@ async def voice_chat(
         followup_questions = []
         possible_diseases = []
         suggested_replies = []
-        response_lang = session_lang
+        response_lang = language
     llm_time = time.perf_counter() - llm_start
 
     # ── Step 4: TTS — convert AI response to speech ───────────────────────
     tts_start = time.perf_counter()
     audio_base64 = ""
     audio_format = "mp3"
+    
+    # Ensure the voice matches the response language
+    effective_voice_id = _VOICE_FOR_LANG.get(response_lang, _VOICE_FOR_LANG["en"])
+    if voice_id:
+        v_info = next((v for v in tts_engine.voices if v["voice_id"] == voice_id), None)
+        if v_info and v_info["language"] == response_lang:
+            effective_voice_id = voice_id
+
     try:
         audio_bytes, _ = await tts_engine.synthesize_async(
             text=ai_response_text,

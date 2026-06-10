@@ -41,6 +41,15 @@ Output ONLY valid JSON matching this schema:
     // Examples: "gender": "male", "fever_temperature_f": 100.4, "cough_duration_days": 3,
     //           "cough_type": "dry", "fever_present": false, "phlegm": false
   },
+  "vitals": {
+    // Extract any explicitly mentioned vitals (e.g., "temperature": 101.2, "heart_rate": 90, "systolic_bp": 120, "diastolic_bp": 80)
+  },
+  "risk_factors": {
+    // Extract lifestyle/history risks (e.g., "smoking": true, "diabetes": true)
+  },
+  "medications": {
+    // Extract currently taken medications (e.g., "aspirin": true)
+  },
   "normalized_symptoms": [
     // ONLY exact strings from the provided base symptom list. Never invent new strings.
   ],
@@ -138,7 +147,7 @@ The JSON must conform to this exact schema:
   "urgency": "EMERGENCY|HIGH|MEDIUM|LOW|NONE",
   "followup_questions": ["string — 1-3 new questions to maximize diagnostic uncertainty reduction, never repeated"],
   "resolved_questions": ["string — exact text of questions answered this turn"],
-  "suggested_replies": ["string — 2-4 context-aware possible answers for the user to select, based on unresolved slots and active diagnostic pathway"],
+  "suggested_replies": ["string — 2-4 context-aware possible answers for the user to select, written from the PATIENT'S perspective (e.g., 'Yes, it hurts', 'It started yesterday'). Do NOT write questions here."],
   "stage": int,
   "advice": "string — safe general health guidance, never prescriptions. If EMERGENCY, provide critical immediate actions.",
   "disclaimer": "This is AI-generated guidance and not a medical diagnosis. Consult a licensed doctor for professional medical advice."
@@ -313,7 +322,7 @@ The patient is communicating in Bangla. ALL output fields listed below MUST be w
 
 - "reply" — সম্পূর্ণ বাংলায় লিখুন। সম্মানজনক "আপনি" ব্যবহার করুন।
 - "followup_questions" — প্রতিটি প্রশ্ন বাংলায় লিখুন।
-- "suggested_replies" — প্রতিটি উত্তর বিকল্প বাংলায় লিখুন।
+- "suggested_replies" — প্রতিটি উত্তর বিকল্প বাংলায় লিখুন। এগুলো অবশ্যই রোগীর দৃষ্টিকোণ থেকে হতে হবে (যেমন: "হ্যাঁ, ব্যথা করছে", "না, আমার জ্বর নেই")। এখানে কোনো প্রশ্ন লিখবেন না।
 - "advice" — পরামর্শ বাংলায় লিখুন।
 - "disclaimer" — এই বিবৃতিটি বাংলায় লিখুন: "এটি AI-উৎপাদিত পরামর্শ এবং চিকিৎসা নির্ণয় নয়। পেশাদার চিকিৎসা পরামর্শের জন্য একজন লাইসেন্সপ্রাপ্ত ডাক্তারের সাথে পরামর্শ করুন।"
 

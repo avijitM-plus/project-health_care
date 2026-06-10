@@ -66,8 +66,15 @@ class ConversationState(BaseModel):
     session_id: str
     symptoms: list[SymptomRecord] = []
     clinical_slots: dict = Field(default_factory=dict)
+    vitals: dict[str, Any] = Field(default_factory=dict)
+    risk_factors: dict[str, Any] = Field(default_factory=dict)
+    medications: dict[str, Any] = Field(default_factory=dict)
+    test_history: dict[str, Any] = Field(default_factory=dict)
+    report_findings: dict[str, Any] = Field(default_factory=dict)
+    differential_diagnosis: list[dict] = Field(default_factory=list)
     metadata: SessionMetadata = Field(default_factory=SessionMetadata)
     predictions: list[dict] = []
+    urgency_score: str = "NONE"
     peak_urgency: str = "NONE"         # Never downgrades
     history: list[dict] = []           # [{role, content}]
     asked_questions: list[str] = []    # V3 - Questions generated and asked
@@ -96,6 +103,9 @@ class ConversationState(BaseModel):
 class StateExtractionResponse(BaseModel):
     """LLM structured output for state mutation."""
     mutated_slots: dict = {}
+    vitals: dict = {}
+    risk_factors: dict = {}
+    medications: dict = {}
     normalized_symptoms: List[str] = []
     resolved_questions: List[str] = []
 
@@ -108,6 +118,7 @@ class ChatRequest(BaseModel):
     age: int | None = None
     gender: str | None = None
     chronic_conditions: list[str] = []
+    language: str = "en"
 
 class DiseasePrediction(BaseModel):
     name: str

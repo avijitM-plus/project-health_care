@@ -151,15 +151,19 @@ class LLMService:
             },
         )
 
-    def analyze_report(self, report_text: str, symptoms: str) -> dict:
+    def analyze_report(self, report_text: str, symptoms: str, language: str = "en") -> dict:
         """Analyze extracted medical report text via Groq."""
         user_prompt = prompt_service.get_report_prompt(
             report_text=report_text,
             symptoms=symptoms,
         )
 
+        system_prompt = REPORT_SYSTEM_PROMPT
+        if language == "bn":
+            system_prompt = REPORT_SYSTEM_PROMPT + BANGLA_LANGUAGE_INSTRUCTION
+
         return self._call_groq(
-            system_prompt=REPORT_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=3072,
             temperature=0.2,
@@ -352,6 +356,9 @@ class LLMService:
             temperature=0.0,
             fallback={
                 "mutated_slots": {},
+                "vitals": {},
+                "risk_factors": {},
+                "medications": {},
                 "normalized_symptoms": [],
                 "resolved_questions": []
             },

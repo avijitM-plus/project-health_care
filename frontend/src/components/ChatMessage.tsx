@@ -6,6 +6,7 @@ import { FollowUpChips } from './FollowUpChips';
 import { Bot, User, ThumbsUp, ThumbsDown, Volume2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useChat } from '../context/ChatContext';
+import { useLanguage } from '../context/LanguageContext';
 import './ChatMessage.css';
 
 interface ChatMessageProps {
@@ -17,6 +18,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
     const isAi = message.sender === 'ai';
     const metadata = message.responseMetadata;
     const { conversationId } = useChat();
+    const { language, voiceId, speed } = useLanguage();
     const [feedbackGiven, setFeedbackGiven] = useState<'helpful' | 'incorrect' | null>(null);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -49,7 +51,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onFollowUpSel
 
         setIsSpeaking(true);
         try {
-            const buffer = await apiService.textToSpeech(message.text);
+            const buffer = await apiService.textToSpeech(message.text, voiceId, speed, 'mp3', language);
             const blob = new Blob([buffer], { type: 'audio/mpeg' });
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
