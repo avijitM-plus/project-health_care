@@ -23,6 +23,8 @@ interface ChatContextProps {
     peakUrgency: string;
     clinicalSlots: Record<string, any>;
     stage: number;
+    stageName: string;
+    progressPercent: number;
     uploadedReports: any[];
     imagingStudies: ImagingFindings[];
     addImagingStudy: (study: ImagingFindings) => void;
@@ -64,6 +66,14 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .filter(m => m.sender === 'ai' && m.responseMetadata?.stage)
         .slice(-1)[0]?.responseMetadata?.stage || 1;
 
+    const stageName = messages
+        .filter(m => m.sender === 'ai' && m.responseMetadata?.stage_name)
+        .slice(-1)[0]?.responseMetadata?.stage_name || 'Chief Complaint';
+
+    const progressPercent = messages
+        .filter(m => m.sender === 'ai' && m.responseMetadata?.progress_percent !== undefined)
+        .slice(-1)[0]?.responseMetadata?.progress_percent ?? 20;
+
     const uploadedReports = messages
         .filter(m => m.sender === 'ai' && m.responseMetadata?.reports)
         .slice(-1)[0]?.responseMetadata?.reports || [];
@@ -100,6 +110,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 peakUrgency,
                 clinicalSlots,
                 stage,
+                stageName,
+                progressPercent,
                 uploadedReports,
                 imagingStudies,
                 addImagingStudy,

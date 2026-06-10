@@ -425,12 +425,18 @@ class WeightedDiagnosisEngine:
         for disease, profile in SCORING_PROFILES.items():
             score = 0.0
             evidence_log: list[str] = []
+            positive_evidence: list[str] = []
+            negative_evidence: list[str] = []
+            missing_evidence: list[str] = []
 
             # 1. Symptoms
             for sym, weight in profile.get("symptoms", {}).items():
                 if sym in normalized_symptoms:
                     score += weight
                     evidence_log.append(f"Symptom: {sym} (+{weight})")
+                    positive_evidence.append(sym)
+                else:
+                    missing_evidence.append(sym)
 
             # 2. Vitals rules
             for vital_key, rule_fn in profile.get("vitals", {}).items():
@@ -441,6 +447,7 @@ class WeightedDiagnosisEngine:
                         if pts > 0:
                             score += pts
                             evidence_log.append(f"Vital ({vital_key}={val}): (+{pts})")
+                            positive_evidence.append(f"{vital_key}={val}")
                     except Exception:
                         pass
 
@@ -453,6 +460,7 @@ class WeightedDiagnosisEngine:
                         if pts > 0:
                             score += pts
                             evidence_log.append(f"Slot ({slot_key}={val}): (+{pts})")
+                            positive_evidence.append(f"{slot_key}={val}")
                     except Exception:
                         pass
 
@@ -465,6 +473,9 @@ class WeightedDiagnosisEngine:
                     evidence_log.append(
                         f"Report: {report_key} (+{boosted:.1f} = {base_weight}×{self.REPORT_WEIGHT_MULTIPLIER})"
                     )
+                    positive_evidence.append(report_key)
+                else:
+                    missing_evidence.append(report_key)
 
             # 5. Imaging — highest boost (strongest objective evidence)
             for img_key, base_weight in profile.get("imaging", {}).items():
@@ -475,12 +486,14 @@ class WeightedDiagnosisEngine:
                     evidence_log.append(
                         f"Imaging: {img_key} (+{boosted:.1f} = {base_weight}×{self.IMAGING_WEIGHT_MULTIPLIER})"
                     )
+                    positive_evidence.append(img_key)
 
             # 6. Risk factors
             for risk_key, weight in profile.get("risk_factors", {}).items():
                 if risk_key in active_risks:
                     score += weight
                     evidence_log.append(f"Risk: {risk_key} (+{weight})")
+                    positive_evidence.append(risk_key)
 
             if score <= 0:
                 continue
@@ -499,6 +512,9 @@ class WeightedDiagnosisEngine:
                 "score":        round(normalized_score * 100),
                 "concern_level": concern,
                 "audit_log":    evidence_log,
+                "positive_evidence": positive_evidence,
+                "negative_evidence": negative_evidence,
+                "missing_evidence": missing_evidence,
             })
 
         results.sort(key=lambda x: x["score"], reverse=True)

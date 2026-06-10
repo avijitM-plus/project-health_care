@@ -33,6 +33,8 @@ export const Sidebar: React.FC = () => {
         latestDiseases,
         clinicalSlots,
         stage,
+        stageName,
+        progressPercent,
         uploadedReports,
         imagingStudies,
         patientAge,
@@ -51,14 +53,7 @@ export const Sidebar: React.FC = () => {
         setSpeechRate,
     } = useLanguage();
 
-    const stageNames = [
-        t('stage.1'),
-        t('stage.2'),
-        t('stage.3'),
-        t('stage.4'),
-        t('stage.5'),
-    ];
-    const currentStageName = stageNames[Math.min(stage - 1, 4)] || 'Consultation';
+    const currentStageName = stageName || 'Chief Complaint';
 
     // Only show meaningfully filled slots
     const filledSlots = Object.entries(clinicalSlots).filter(([, v]) => isFilledSlot(v));
@@ -128,7 +123,7 @@ export const Sidebar: React.FC = () => {
                         <div className="stage-bar">
                             <div
                                 className="stage-fill"
-                                style={{ width: `${(stage / 5) * 100}%` }}
+                                style={{ width: `${progressPercent}%` }}
                             />
                         </div>
                     </div>

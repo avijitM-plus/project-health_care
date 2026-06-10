@@ -766,31 +766,62 @@ class ClinicalStateEngine:
         flag_score: int,
     ) -> None:
         """
-        Append a structured reasoning entry to state.audit_logs for debugging.
-        Stored internally; not exposed in the API response.
+        Append a structured reasoning entry to state.audit_logs.
+        Strictly matching: {disease, evidence_used, score, urgency_reason}
         """
         if not hasattr(state, "audit_logs"):
             return
-        entry: dict[str, Any] = {
-            "turn":         turn,
-            "urgency":      urgency,
-            "flag_score":   flag_score,
-            "active_flags": active_flags[:5],
-            "top_predictions": [
-                {
-                    "disease":  p.get("name"),
-                    "score":    p.get("score"),
-                    "evidence": p.get("audit_log", [])[:5],
-                }
-                for p in predictions[:3]
-            ],
-        }
-        state.audit_logs.append(entry)
+        
+        urgency_reason = "No flags"
+        if active_flags:
+            urgency_reason = f"Flags: {'; '.join(active_flags[:3])} (Score {flag_score})"
+
+        for p in predictions[:3]:
+            entry: dict[str, Any] = {
+                "turn": turn,
+                "disease": p.get("name", "Unknown"),
+                "evidence_used": p.get("audit_log", []),
+                "score": p.get("score", 0),
+                "urgency_reason": urgency_reason
+            }
+            state.audit_logs.append(entry)
+
         logger.debug(
             f"ClinicalAudit turn={turn} urgency={urgency} "
-            f"flags={len(active_flags)} "
             f"top={predictions[0].get('name') if predictions else 'None'}"
         )
 
+    def build_clinical_state_response(self, state: ConversationState) -> dict:
+        """
+        Convert the internal ConversationState to the strict external ClinicalState format.
+        """
+        symptoms = {}
+        duration = {}
+        for sym in state.symptoms:
+            symptoms[sym.name] = sym.severity
+            if sym.duration:
+                duration[sym.name] = sym.duration
+
+        completed_tests = self.extract_completed_tests(
+            reports=state.reports,
+            imaging_studies=state.imaging_studies,
+            test_history=state.test_history
+        )
+
+        return {
+            "chief_complaint": state.chief_complaint or "",
+            "symptoms": symptoms,
+            "duration": duration,
+            "risk_factors": state.risk_factors,
+            "medications": state.medications,
+            "lab_findings": self.flatten_report_findings(state.reports),
+            "imaging_findings": {k: v for s in state.imaging_studies for k, v in s.clinical_slots.items()},
+            "completed_tests": completed_tests,
+            "differentials": state.predictions,
+            "urgency": state.peak_urgency,
+            "red_flags": [flag for hist in state.red_flag_history for flag in hist.get("flags", [])],
+            "answered_questions": state.answered_questions,
+            "stage": state.stage
+        }
 
 clinical_state_engine = ClinicalStateEngine()

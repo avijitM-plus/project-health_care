@@ -86,10 +86,10 @@ const translations: Record<SupportedLanguage, Record<string, string>> = {
 
     // ── Stage names ───────────────────────────────────────────────
     'stage.1': 'Chief Complaint',
-    'stage.2': 'Characterization',
-    'stage.3': 'Red Flags',
-    'stage.4': 'Differential Refinement',
-    'stage.5': 'Disposition',
+    'stage.2': 'Symptom Exploration',
+    'stage.3': 'Risk Assessment',
+    'stage.4': 'Report Analysis',
+    'stage.5': 'Clinical Recommendation',
   },
 
   bn: {

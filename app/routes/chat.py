@@ -393,6 +393,7 @@ async def chat_endpoint(request: ChatRequest):
                 user_message=user_msg,
                 test_history=state.test_history,
                 report_findings=state.report_findings,
+                completed_tests=list(completed_tests.keys()),
             )
             llm_output = chat_future.result()
             recommended_tests = test_future.result()
@@ -442,7 +443,16 @@ async def chat_endpoint(request: ChatRequest):
     if final_followups:
         memory_service.add_asked_questions(session_id, final_followups)
 
-    new_stage = llm_output.get("stage", state.stage)
+    from app.services.stage_engine import workflow_stage_engine
+    new_stage, stage_name, progress_percent, debug_logs = workflow_stage_engine.compute_stage(
+        state=state,
+        predicted_diseases=predicted,
+        urgency=urgency
+    )
+    logger.info(
+        f"[{session_id}] WORKFLOW STAGE AUDIT:\n" + 
+        "\n".join([f"  {k}: {v}" for k, v in debug_logs.items()])
+    )
     memory_service.update_stage(session_id, new_stage)
     t = _tick(session_id, "state_machine_update", t)
 
@@ -488,6 +498,8 @@ async def chat_endpoint(request: ChatRequest):
     llm_output["turn_number"] = turn
     llm_output["clinical_slots"] = refreshed_slots
     llm_output["stage"] = new_stage
+    llm_output["stage_name"] = stage_name
+    llm_output["progress_percent"] = progress_percent
     llm_output["suggested_replies"] = llm_output.get("suggested_replies", [])
     llm_output["resolved_questions"] = all_resolved
     llm_output["recommended_tests"] = recommended_tests
@@ -496,6 +508,7 @@ async def chat_endpoint(request: ChatRequest):
 
     llm_output["working_diagnosis"] = wd_dict
     llm_output["action_plan"] = action_plan
+    llm_output["clinical_state"] = clinical_state_engine.build_clinical_state_response(final_state)
 
     from app.services.working_diagnosis_engine import WorkingDiagnosis as WD_cls
     wd_obj_final: WD_cls | None = None

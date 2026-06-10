@@ -21,6 +21,7 @@ class TestRecommendationEngine:
         user_message: str = "",
         test_history: dict = None,
         report_findings: dict = None,
+        completed_tests: list[str] = None,
     ) -> list[dict]:
         """
         Recommend diagnostic tests using a two-layer strategy:
@@ -36,6 +37,8 @@ class TestRecommendationEngine:
           Activated when no pathway match exists, or to supplement pathway tests
           with additional workup based on predicted differentials and reports.
         """
+        completed_tests = completed_tests or []
+        
         # ── 1. Clinical context extraction (zero LLM calls) ──────────────────
         ctx = clinical_context_extractor.extract(user_message, symptoms, clinical_slots)
         pathway_context = clinical_pathway_engine.get_pathway_context(ctx)
@@ -80,6 +83,8 @@ class TestRecommendationEngine:
             )
         imaging_str = "\n".join(imaging_context) if imaging_context else "None"
 
+        completed_tests_str = ", ".join(completed_tests) if completed_tests else "None"
+
         # ── 4. Assemble prompt — pathway context goes FIRST ──────────────────
         pathway_section = f"{pathway_context}\n\n" if pathway_context else ""
 
@@ -101,6 +106,9 @@ Existing Longitudinal Lab Reports:
 
 Imaging Studies Already Performed This Session:
 {imaging_str}
+
+COMPLETED TESTS:
+{completed_tests_str}
 
 IMPORTANT: Do NOT recommend imaging modalities or lab tests already performed above (check Test History, Longitudinal Lab Reports, and Imaging Studies) unless there is a strong clinical justification (e.g., repeat CXR to monitor known pneumonia after 48h).
 Identify the missing diagnostic evidence. Recommend the highest-value next tests.

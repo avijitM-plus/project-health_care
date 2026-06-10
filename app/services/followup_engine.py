@@ -39,9 +39,9 @@ class FollowupEngine:
             clinical_slots, answered_questions, asked_questions, clinical_slot_resolver
         )
 
-        # ── 2. Symptom-driven NBQ questions ────────────────────────────────────
+        # ── 2. Symptom-driven NBQ questions (from missing evidence) ────────────
         symptom_questions = self._generate_symptom_followups(
-            symptoms, clinical_slots, answered_questions, asked_questions,
+            predicted_diseases, clinical_slots, answered_questions, asked_questions,
             clinical_slot_resolver
         )
 
@@ -119,32 +119,31 @@ class FollowupEngine:
         return result
 
     # ------------------------------------------------------------------
-    # Symptom-driven NBQ follow-up generation
+    # Deterministic Missing-Evidence Follow-up generation
     # ------------------------------------------------------------------
 
     def _generate_symptom_followups(
         self,
-        symptoms: list[str],
+        predicted_diseases: list[dict],
         clinical_slots: dict,
         answered_questions: list[str],
         asked_questions: list[str],
         clinical_slot_resolver,
     ) -> list[str]:
         """
-        Generate questions from the NBQ_GRAPH based on accumulated Kaggle symptoms.
+        Generate questions deterministically by interrogating the missing evidence
+        from the top 3 Differential Diagnoses.
         """
-        # Map Kaggle symptom names → NBQ graph keys; deduplicate
-        seen_nbq_keys: set[str] = set()
-        nbq_symptoms: list[str] = []
-        for sym in symptoms:
-            nbq_key = KAGGLE_TO_NBQ.get(sym, sym)
-            if nbq_key in NBQ_GRAPH and nbq_key not in seen_nbq_keys:
-                nbq_symptoms.append(nbq_key)
-                seen_nbq_keys.add(nbq_key)
+        missing_symptoms: list[str] = []
+        for p in predicted_diseases[:3]:
+            for sym in p.get("missing_evidence", []):
+                if sym not in missing_symptoms:
+                    missing_symptoms.append(sym)
 
         candidates: list[dict] = []
-        for sym in nbq_symptoms:
-            for node in NBQ_GRAPH.get(sym, []):
+        for sym in missing_symptoms:
+            nbq_key = KAGGLE_TO_NBQ.get(sym, sym)
+            for node in NBQ_GRAPH.get(nbq_key, []):
                 slot_name = node["slot"]
 
                 if clinical_slot_resolver.is_slot_filled(slot_name, clinical_slots):

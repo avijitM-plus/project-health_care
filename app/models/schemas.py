@@ -61,6 +61,22 @@ class ReportData(BaseModel):
     extracted_symptoms: list[str] = []
     clinical_slots: dict[str, Any] = {}
 
+class ClinicalState(BaseModel):
+    """Strictly adheres to the user-defined Clinical State architecture."""
+    chief_complaint: str = ""
+    symptoms: dict[str, str] = {}
+    duration: dict[str, str] = {}
+    risk_factors: dict[str, Any] = {}
+    medications: dict[str, Any] = {}
+    lab_findings: dict[str, Any] = {}
+    imaging_findings: dict[str, Any] = {}
+    completed_tests: dict[str, bool] = {}
+    differentials: list[dict] = []
+    urgency: str = "NONE"
+    red_flags: list[str] = []
+    answered_questions: list[str] = []
+    stage: int = 1
+
 class ConversationState(BaseModel):
     """Complete session state stored in memory."""
     session_id: str
@@ -148,6 +164,8 @@ class ChatResponse(BaseModel):
     # V4 - State engine additions
     clinical_slots: dict = {}
     stage: int = 1
+    stage_name: str = "Chief Complaint"
+    progress_percent: int = 20
     suggested_replies: List[str] = []
     recommended_tests: List[dict] = []
     reports: List[ReportData] = []
@@ -155,6 +173,7 @@ class ChatResponse(BaseModel):
     action_plan: Optional[dict] = None
     clinical_stage: str = "information_gathering"
     preferred_language: str = "en"
+    clinical_state: Optional[ClinicalState] = None
 
 class HealthResponse(BaseModel):
     status: str
