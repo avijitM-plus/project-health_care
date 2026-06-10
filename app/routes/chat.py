@@ -51,6 +51,7 @@ from app.services.working_diagnosis_engine import (
 )
 from app.services.diagnostic_action_engine import diagnostic_action_engine
 from app.services.language_detector import resolve_language
+from app.services.gemini_bangla_service import gemini_bangla_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -535,6 +536,20 @@ async def chat_endpoint(request: ChatRequest):
         f"flags={len(all_flags)}, completed_tests={len(completed_tests)}, "
         f"test_cache={'HIT' if cache_hit else 'MISS'}"
     )
+
+    # ── 16. Gemini Bangla polish (only when language == "bn") ────────────────
+    # Replaces reply / followup_question / suggested_replies with natural
+    # Bangladeshi Bangla. Clinical content (urgency, diseases, tests) is
+    # untouched. Falls back silently to Qwen output on any Gemini failure.
+    if session_lang == "bn":
+        t = time.perf_counter()
+        llm_output = gemini_bangla_service.enhance_bangla_response(
+            llm_output=llm_output,
+            state=final_state,
+            urgency=urgency,
+            session_id=session_id,
+        )
+        _tick(session_id, "gemini_bangla_polish", t)
 
     # Safe serialization to prevent Pydantic validation errors from LLM hallucinations
     try:

@@ -15,7 +15,8 @@ ENV/
 Thumbs.db
 
 #Voice caches chunks
-voice_cache/
+voice_cache/*
+uploads/*
 
 # Archives
 *.zip

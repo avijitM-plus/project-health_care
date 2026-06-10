@@ -16,6 +16,9 @@ pydantic
 python-multipart
 pandas
 
+# ── Gemini Bangla response layer ─────────────────
+google-genai>=1.0.0
+
 # ── Voice system dependencies ────────────────────
 faster-whisper>=1.0.0
 openai-whisper
