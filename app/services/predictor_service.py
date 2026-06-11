@@ -13,24 +13,38 @@ ENCODER_PATH = "models/symptom_encoder.pkl"
 FEATURES_PATH = "models/features.pkl"
 
 MIN_CONFIDENCE = 0.05
-MIN_MATCHED_SYMPTOMS = 2  # Require at least 2 matched symptoms for a prediction
+ADVISORY_CONFIDENCE = 0.10    # Below this → mark as advisory (lower trust)
+MIN_MATCHED_SYMPTOMS = 2      # Require at least 2 matched symptoms for a prediction
+MIN_QUALITY_SYMPTOMS = 1      # At least 1 specific (non-generic) symptom required
 
 # Conditions biologically impossible for a given gender
 _MALE_IMPOSSIBLE = frozenset({
+    # Menstrual / ovarian / uterine
     "idiopathic irregular menstrual cycle", "irregular menstrual cycle",
     "pcos", "polycystic ovary syndrome", "endometriosis",
-    "pregnancy", "ectopic pregnancy",
-    "cervical cancer", "ovarian cancer", "uterine cancer",
-    "menopause", "premenstrual syndrome", "pms",
-    "dysmenorrhea", "amenorrhea", "menorrhagia",
-    "fibroid", "uterine fibroid",
-    "vaginal discharge", "vaginitis", "vaginal infection",
+    "endometrial cancer", "uterine polyp",
+    "pregnancy", "ectopic pregnancy", "miscarriage",
+    "cervical cancer", "ovarian cancer", "uterine cancer", "ovarian cyst",
+    "menopause", "perimenopause", "premenstrual syndrome", "pms",
+    "dysmenorrhea", "amenorrhea", "menorrhagia", "oligomenorrhea",
+    "fibroid", "uterine fibroid", "leiomyoma",
+    "vaginal discharge", "vaginitis", "vaginal infection", "bacterial vaginosis",
+    "vulvodynia", "bartholin cyst",
+    # Breast (female-specific presentations)
+    "breast cancer", "mastitis", "fibrocystic breast disease",
+    # Obstetric
+    "preeclampsia", "gestational diabetes",
 })
 
 _FEMALE_IMPOSSIBLE = frozenset({
-    "prostate cancer", "benign prostatic hyperplasia", "bph",
-    "testicular cancer", "testicular torsion",
-    "epididymitis", "phimosis", "priapism",
+    # Prostate
+    "prostate cancer", "benign prostatic hyperplasia", "bph", "prostatitis",
+    # Testicular / scrotal
+    "testicular cancer", "testicular torsion", "orchitis",
+    "epididymitis", "hydrocele", "varicocele",
+    # Penile
+    "phimosis", "priapism", "balanitis",
+    # Sexual dysfunction
     "erectile dysfunction",
 })
 
@@ -158,15 +172,32 @@ class PredictorService:
             if name in impossible:
                 probas[i] = 0.0
 
+        # Minimum symptom quality check: require at least 1 non-generic symptom
+        _GENERIC = {"fatigue", "weakness", "pain", "discomfort", "malaise"}
+        specific_count = sum(
+            1 for s in extracted_symptoms
+            if s.lower().strip().replace(" ", "_") not in _GENERIC
+        )
+        if specific_count < MIN_QUALITY_SYMPTOMS:
+            logger.info(
+                f"Predictor: no specific symptoms — only generic terms present. "
+                "Skipping prediction."
+            )
+            return []
+
         # Select top-3 above confidence threshold
         top_indices = np.argsort(probas)[::-1][:3]
         results = []
         for idx in top_indices:
-            if probas[idx] > MIN_CONFIDENCE:
-                results.append({
+            p = float(probas[idx])
+            if p > MIN_CONFIDENCE:
+                entry = {
                     "name": self.encoder.inverse_transform([idx])[0],
-                    "concern_level": _concern_level(float(probas[idx])),
-                })
+                    "concern_level": _concern_level(p),
+                }
+                if p < ADVISORY_CONFIDENCE:
+                    entry["advisory"] = True   # Low-confidence — treat as advisory only
+                results.append(entry)
 
         if not results:
             logger.info("Predictor: all predictions below confidence threshold")

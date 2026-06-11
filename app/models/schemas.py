@@ -174,6 +174,9 @@ class ChatResponse(BaseModel):
     clinical_stage: str = "information_gathering"
     preferred_language: str = "en"
     clinical_state: Optional[ClinicalState] = None
+    # v20 additions
+    explanations: List[dict] = []
+    pathway_id: str = ""
 
 class HealthResponse(BaseModel):
     status: str

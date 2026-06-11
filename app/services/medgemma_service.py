@@ -442,6 +442,7 @@ class MedGemmaService:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
         }
         payload = {
             "model": self.model,

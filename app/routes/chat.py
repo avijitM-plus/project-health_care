@@ -52,6 +52,12 @@ from app.services.working_diagnosis_engine import (
 from app.services.diagnostic_action_engine import diagnostic_action_engine
 from app.services.language_detector import resolve_language
 from app.services.gemini_bangla_service import gemini_bangla_service
+from app.services.bangla_normalizer import bangla_normalizer
+from app.services.pathway_engine import pathway_engine
+from app.services.evidence_graph import build_evidence_graph
+from app.services.report_fusion import report_fusion
+from app.services.suggested_reply_engine import suggested_reply_engine
+from app.services.explanation_engine import explanation_engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -101,13 +107,18 @@ async def chat_endpoint(request: ChatRequest):
     session_lang = request.language
     memory_service.update_language(session_id, session_lang)
 
+    # ── 2c. Bangla normalisation for regex extractors ────────────────────────
+    # normalized_msg translates Bangla medical terms to English for slot/context
+    # extractors. The original user_msg is preserved for the LLM (handles Bangla).
+    normalized_msg = bangla_normalizer.normalize(user_msg) if session_lang == "bn" else user_msg
+
     # ── 3. Clinical state extraction (LLM + Regex fallback) ─────────────────
     t = time.perf_counter()
     current_slots = state.clinical_slots
     pending_qs = memory_service.get_pending_questions(session_id)
 
     # 3a. Regex deterministic slot extraction (reliable backup)
-    deterministic_slots = clinical_slot_resolver.resolve_from_text(user_msg, current_slots)
+    deterministic_slots = clinical_slot_resolver.resolve_from_text(normalized_msg, current_slots)
 
     # 3b. LLM extraction for symptoms, complex slots, vitals, risk factors, medications
     extraction_response = state_extractor.extract_state(
@@ -227,7 +238,7 @@ async def chat_endpoint(request: ChatRequest):
     # ── 5b. Clinical context + Working Diagnosis (pure Python, ~1ms) ─────────
     t = time.perf_counter()
     clinical_ctx = clinical_context_extractor.extract(
-        user_msg, symptoms=base_symptom_names, clinical_slots=state.clinical_slots
+        normalized_msg, symptoms=base_symptom_names, clinical_slots=state.clinical_slots
     )
     reloaded = memory_service.load(session_id)
     wd = working_diagnosis_engine.derive(
@@ -309,6 +320,25 @@ async def chat_endpoint(request: ChatRequest):
     safe_advice = advice_engine.generate_advice(base_symptom_names, urgency)
     t = _tick(session_id, "followup_engine+advice", t)
 
+    # ── 7b. Clinical pathway engine ──────────────────────────────────────────
+    t = time.perf_counter()
+    pathway_guidance = pathway_engine.get_pathway_guidance(state=state, user_message=user_msg)
+    if pathway_guidance.active:
+        if pathway_guidance.urgency_override:
+            urgency = memory_service.escalate_urgency(session_id, pathway_guidance.urgency_override)
+        # Inject pathway NBQ as the first follow-up question if not already present
+        if pathway_guidance.nbq_question and (
+            not followups or followups[0] != pathway_guidance.nbq_question
+        ):
+            followups = [pathway_guidance.nbq_question] + followups[:2]
+    t = _tick(session_id, "pathway_engine", t)
+
+    # ── 7c. Evidence graph + report fusion ───────────────────────────────────
+    t = time.perf_counter()
+    evidence = build_evidence_graph(state)
+    fusion_narrative = report_fusion.synthesise_from_graph(evidence, state)
+    t = _tick(session_id, "evidence_graph+report_fusion", t)
+
     # ── 8. Build rich prompt context (CLINICAL STATE HEADER first) ───────────
     t = time.perf_counter()
 
@@ -331,6 +361,10 @@ async def chat_endpoint(request: ChatRequest):
 
     # Clinical header goes FIRST — highest priority context
     full_context = clinical_header + "\n\n" + prompt_context
+    if fusion_narrative:
+        full_context += "\n\n" + fusion_narrative
+    if pathway_guidance.active and pathway_guidance.clinical_note:
+        full_context += "\n\n" + pathway_guidance.clinical_note
     if followups:
         full_context += (
             "\nSLOT-AWARE CANDIDATE QUESTIONS (pre-filtered: only unfilled slots) — "
@@ -471,22 +505,23 @@ async def chat_endpoint(request: ChatRequest):
     # ── 14. Suggested reply alignment ─────────────────────────────────────────
     t = time.perf_counter()
     if final_followups:
-        if session_lang == "en":
-            aligned_replies = clinical_slot_resolver.get_replies_for_question(
-                final_followups[0], refreshed_slots
-            )
-            if aligned_replies:
-                llm_output["suggested_replies"] = aligned_replies
-            elif llm_output.get("suggested_replies"):
-                pass
-            else:
+        engine_replies = suggested_reply_engine.generate_replies(
+            question=final_followups[0],
+            language=session_lang,
+            clinical_slots=refreshed_slots,
+        )
+        if engine_replies:
+            llm_output["suggested_replies"] = engine_replies
+        elif not llm_output.get("suggested_replies"):
+            # Fallback: slot-resolver legacy path (English only)
+            if session_lang == "en":
                 slot_replies = clinical_slot_resolver.get_slot_targeted_suggested_replies(
                     base_symptom_names, refreshed_slots
                 )
                 if slot_replies:
                     llm_output["suggested_replies"] = slot_replies
-        elif not llm_output.get("suggested_replies"):
-            llm_output["suggested_replies"] = []
+            else:
+                llm_output["suggested_replies"] = []
     else:
         if not llm_output.get("suggested_replies"):
             llm_output["suggested_replies"] = []
@@ -510,6 +545,14 @@ async def chat_endpoint(request: ChatRequest):
     llm_output["working_diagnosis"] = wd_dict
     llm_output["action_plan"] = action_plan
     llm_output["clinical_state"] = clinical_state_engine.build_clinical_state_response(final_state)
+    llm_output["pathway_id"] = pathway_guidance.pathway_id if pathway_guidance.active else ""
+
+    # ── 15b. Explanation engine ─────────────────────────────────────────────
+    try:
+        llm_output["explanations"] = explanation_engine.explain(predicted, evidence)
+    except Exception as _exp_err:
+        logger.warning(f"[{session_id}] ExplanationEngine failed: {_exp_err}")
+        llm_output["explanations"] = []
 
     from app.services.working_diagnosis_engine import WorkingDiagnosis as WD_cls
     wd_obj_final: WD_cls | None = None
