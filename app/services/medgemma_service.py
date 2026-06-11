@@ -32,6 +32,7 @@ import os
 import re
 import time
 import random
+import requests
 from io import BytesIO
 from typing import Any
 
@@ -45,10 +46,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-MEDGEMMA_BASE_URL = os.getenv(
-    "MEDGEMMA_ENDPOINT",
-    "https://medgemma-app.bluegrass-9bc64ae5.southeastasia.azurecontainerapps.io",
-).rstrip("/")
 MEDGEMMA_API_KEY = os.getenv("MEDGEMMA_API_KEY", "ollama")
 MEDGEMMA_MODEL = os.getenv("MEDGEMMA_MODEL", "medgemma")
 MEDGEMMA_TIMEOUT = int(os.getenv("MEDGEMMA_TIMEOUT", "60"))
@@ -57,6 +54,44 @@ MEDGEMMA_MAX_IMAGE_DIM = 1024
 
 _BASE_BACKOFF = 2.0   # seconds
 _MAX_BACKOFF = 15.0
+
+# ---------------------------------------------------------------------------
+# Dynamic Endpoint Discovery
+# ---------------------------------------------------------------------------
+_medgemma_endpoint_cache: str | None = None
+_medgemma_endpoint_timestamp: float = 0.0
+_MEDGEMMA_FIREBASE_URL = "https://iasis-6e66e-default-rtdb.firebaseio.com/services/medgemma.json"
+
+def get_medgemma_endpoint() -> str:
+    """Fetch MedGemma endpoint from Firebase with a 5-minute cache."""
+    global _medgemma_endpoint_cache, _medgemma_endpoint_timestamp
+    now = time.time()
+    
+    # Return cached endpoint if within 5 minutes (300 seconds)
+    if _medgemma_endpoint_cache and (now - _medgemma_endpoint_timestamp < 60):
+        return _medgemma_endpoint_cache
+
+    try:
+        response = requests.get(_MEDGEMMA_FIREBASE_URL, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data and isinstance(data, dict) and "url" in data:
+            url = str(data["url"]).strip()
+            if url and url.lower() != "none":
+                url = url.rstrip("/")
+                _medgemma_endpoint_cache = url
+                _medgemma_endpoint_timestamp = now
+                logger.info("MedGemma endpoint loaded from Firebase")
+                return url
+                
+        logger.warning("Firebase returned invalid MedGemma endpoint data, using fallback.")
+    except Exception as e:
+        logger.warning(f"Failed to fetch MedGemma endpoint from Firebase: {e}. Using fallback.")
+
+    # Graceful fallback
+    return os.getenv("MEDGEMMA_ENDPOINT", "").rstrip("/")
+
 
 
 # ---------------------------------------------------------------------------
@@ -273,12 +308,10 @@ class MedGemmaService:
     """
 
     def __init__(self) -> None:
-        self.base_url = MEDGEMMA_BASE_URL
         self.api_key = MEDGEMMA_API_KEY
         self.model = MEDGEMMA_MODEL
-        self._completions_url = f"{self.base_url}/v1/chat/completions"
         logger.info(
-            f"MedGemmaService: endpoint={self.base_url}, model={self.model}, "
+            f"MedGemmaService: model={self.model}, "
             f"timeout={MEDGEMMA_TIMEOUT}s, max_retries={MEDGEMMA_MAX_RETRIES}"
         )
 
@@ -332,10 +365,15 @@ class MedGemmaService:
             {"available": bool, "latency_ms": int | None, "error": str | None}
         """
         start = time.time()
+        endpoint = get_medgemma_endpoint()
+        
+        if not endpoint:
+            return {"available": False, "latency_ms": None, "error": "No endpoint configured"}
+
         try:
             with httpx.Client(timeout=10) as client:
                 response = client.get(
-                    f"{self.base_url}/v1/models",
+                    f"{endpoint}/v1/models",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
                 latency_ms = int((time.time() - start) * 1000)
@@ -439,6 +477,12 @@ class MedGemmaService:
 
     def _call_endpoint(self, b64_image: str, mime_type: str, modality: str) -> str:
         """POST to /v1/chat/completions (OpenAI-compatible multimodal format)."""
+        endpoint = get_medgemma_endpoint()
+        if not endpoint:
+            raise RuntimeError("MedGemma endpoint is not configured or could not be resolved.")
+        
+        completions_url = f"{endpoint}/v1/chat/completions"
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -471,7 +515,7 @@ class MedGemmaService:
             "temperature": 0.1,
         }
         with httpx.Client(timeout=MEDGEMMA_TIMEOUT) as client:
-            response = client.post(self._completions_url, headers=headers, json=payload)
+            response = client.post(completions_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
